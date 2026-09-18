@@ -1,0 +1,23 @@
+gitignore
+# Local agent instructions - never committed
+CLAUDE.md
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Environment / secrets
+.env
+
+# Trained model artifacts are produced by ml/train.py, not stored in Git
+models/*
+!models/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
