@@ -1,0 +1,15 @@
+
+
+# --- Web API ---------------------------------------------------------------
+fastapi>=0.115            # HTTP API framework: routing, validation, auto docs
+uvicorn[standard]>=0.30   # ASGI server that runs the FastAPI app ([standard] adds faster event loop + HTTP parser)
+pydantic>=2.9             # Request/response data models and validation (FastAPI depends on it, pinned here so we control the major version)
+pydantic-settings>=2.5    # Reads configuration from environment variables / .env file
+
+# --- Machine learning ------------------------------------------------------
+scikit-learn>=1.5         # TF-IDF + Logistic Regression classifier
+joblib>=1.4               # Saves/loads the trained model file (scikit-learn's recommended serializer)
+
+# --- Testing ---------------------------------------------------------------
+pytest>=8.3               # Test runner
+httpx>=0.27               # HTTP client required by FastAPI's TestClient

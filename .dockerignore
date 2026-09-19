@@ -1,0 +1,12 @@
+# Keep the image small and free of local-only files
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.env
+CLAUDE.md
+models/
+tests/
+scripts/
+docs/

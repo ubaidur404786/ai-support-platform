@@ -1,0 +1,201 @@
+text,label
+I was charged twice for my subscription this month,billing
+Why did my invoice increase compared to last month?,billing
+I need a refund for the payment I made yesterday,billing
+My credit card was declined but the money was still taken,billing
+Can I get a copy of my invoice for March?,billing
+How do I update the payment method on my account?,billing
+The price on the checkout page is different from the price on your website,billing
+I cancelled my plan but I was still billed,billing
+Do you offer discounts for annual payment?,billing
+There is an unknown charge from your company on my bank statement,billing
+I want to downgrade my plan to reduce the monthly cost,billing
+My payment failed and now my subscription says overdue,billing
+The app crashes every time I open the reports page,technical_issue
+I get a 500 error when I try to upload a file,technical_issue
+The website is very slow since this morning,technical_issue
+Export to CSV produces an empty file,technical_issue
+The mobile app does not sync with the web version,technical_issue
+"Search results are not loading, the page just spins",technical_issue
+After the latest update the dashboard shows wrong numbers,technical_issue
+I keep getting a connection timeout error,technical_issue
+The PDF download button does nothing when I click it,technical_issue
+Notifications stopped working on my Android phone,technical_issue
+Images in my project are broken and show a grey box,technical_issue
+The API returns invalid JSON for the orders endpoint,technical_issue
+I forgot my password and the reset email never arrives,account_access
+My account is locked after too many login attempts,account_access
+"I cannot log in, it says my email address does not exist",account_access
+How do I enable two-factor authentication?,account_access
+I want to change the email address linked to my account,account_access
+"Someone else may have accessed my account, please help",account_access
+The verification code from the authenticator app is rejected,account_access
+I need to delete my account and all my data,account_access
+My login works on the website but not in the mobile app,account_access
+How can I add a new team member to our workspace?,account_access
+I was removed from my organization by mistake and need access again,account_access
+Single sign-on with Google stopped working for our team,account_access
+It would be great to have a dark mode in the app,feature_request
+Can you add support for exporting reports to Excel?,feature_request
+Please add the option to schedule messages for later,feature_request
+We need an integration with Slack for notifications,feature_request
+I would love to see keyboard shortcuts for common actions,feature_request
+"Is it possible to add more languages, for example German?",feature_request
+A calendar view for tasks would be really useful,feature_request
+Please allow bulk editing of multiple items at once,feature_request
+Could you add custom fields to the customer profile?,feature_request
+It would help to have an audit log of who changed what,feature_request
+We want the ability to set different permissions per project,feature_request
+Can the dashboard be customized with our own widgets?,feature_request
+I was billed for a plan I never signed up for,billing
+The amount on my receipt does not match what I agreed to pay,billing
+Can you send me a VAT invoice with our company details?,billing
+I paid for the yearly plan but my account still shows the monthly one,billing
+Why is there a late fee on my account?,billing
+Please cancel my subscription and stop charging my card,billing
+I used a promo code at checkout but the discount was not applied,billing
+My trial ended and I was charged without any warning,billing
+Is it possible to pay by bank transfer instead of card?,billing
+I need to change the billing address on my invoices,billing
+The subscription renewed automatically and I want that money back,billing
+How much does the premium plan cost per user?,billing
+I see a pending transaction from you that I do not recognize,billing
+Can I switch from monthly to annual billing and get the lower rate?,billing
+My invoice shows 12 seats but we only have 8 users,billing
+Why was my card charged in a different currency?,billing
+I was double charged after retrying a failed payment,billing
+Where can I download all my past invoices?,billing
+The page freezes when I scroll through a long list of tickets,technical_issue
+Uploading images larger than 5 MB fails with a network error,technical_issue
+The login page keeps reloading in an endless loop,technical_issue
+The search bar returns results from the wrong project,technical_issue
+Dates in the export are shifted by one day,technical_issue
+Push notifications arrive several hours late,technical_issue
+The iOS app closes immediately after the splash screen,technical_issue
+Charts on the analytics page are blank in Firefox,technical_issue
+I get a 502 Bad Gateway error every few minutes,technical_issue
+The email digest contains broken links,technical_issue
+Copy and paste does not work inside the text editor,technical_issue
+The app shows an error saying something went wrong with no details,technical_issue
+Sorting by date does not work in the tickets table,technical_issue
+The webhook is firing twice for every event,technical_issue
+Files I deleted still appear in the folder view,technical_issue
+The dark theme has unreadable text in the settings page,technical_issue
+Autosave is not saving my changes in the document editor,technical_issue
+My integration stopped receiving data since the last release,technical_issue
+I did not receive the email to confirm my new account,account_access
+The password reset link says it has expired,account_access
+I am locked out because I lost my phone with the authenticator app,account_access
+How do I recover my account after deleting it by mistake?,account_access
+My colleague cannot accept the invitation to join our workspace,account_access
+I get an access denied message when opening my own project,account_access
+Please transfer ownership of the account to another team member,account_access
+Can I merge two accounts that use different email addresses?,account_access
+I want to log out of all devices where my account is signed in,account_access
+The magic login link takes me to a blank page,account_access
+My username is taken by an old account I no longer control,account_access
+I need to set up SAML login for our company domain,account_access
+How can I see which people have admin rights in our organization?,account_access
+I changed my password and now none of my devices can log in,account_access
+My account was deactivated and I was not told why,account_access
+I cannot remove a former employee from our team,account_access
+Two-factor codes sent by SMS are not arriving,account_access
+I keep getting logged out every few minutes,account_access
+Please add a way to duplicate an existing project,feature_request
+It would be useful to receive a weekly summary email,feature_request
+Can you support markdown formatting in comments?,feature_request
+We would like to export data automatically every night,feature_request
+Please add a mobile widget for quick task creation,feature_request
+Could the app remember my last used filters?,feature_request
+I would like to assign a ticket to more than one person,feature_request
+Add support for uploading videos to tickets,feature_request
+It would be nice to have templates for common replies,feature_request
+Can you add a Trello integration?,feature_request
+Please provide a public API for creating tickets,feature_request
+A read-only role for external clients would be helpful,feature_request
+Could you add a time tracking feature for tasks?,feature_request
+Please allow tagging users in the description field,feature_request
+We need the ability to archive old projects instead of deleting them,feature_request
+A kanban board view would make planning much easier,feature_request
+Can you add reminders before a deadline is reached?,feature_request
+It would help to search inside file attachments,feature_request
+Why does my statement show two payments for the same month,billing
+The refund I was promised has not arrived after two weeks,billing
+Can you explain the taxes added to my invoice,billing
+My coupon for 20 percent off was rejected at checkout,billing
+I want to pay yearly to save money on my subscription,billing
+How do I remove my saved credit card from the account,billing
+I upgraded to the business plan but I am still paying the old price,billing
+My company needs a purchase order before we can pay,billing
+The receipt email never arrived after my payment,billing
+Please stop the automatic renewal of my plan,billing
+I was charged after my free trial even though I cancelled,billing
+Is there a student or non-profit discount available,billing
+The invoice is addressed to the wrong company name,billing
+My payment is stuck as pending and my account is limited,billing
+How can I get a refund for unused months,billing
+The total on my invoice is higher than the plan price on your pricing page,billing
+My debit card expired and the renewal payment failed,billing
+Can I get a credit note for the duplicate charge,billing
+Why is my plan price different from what my colleague pays,billing
+I need the invoice in PDF format for my accountant,billing
+The dashboard takes more than a minute to load,technical_issue
+Attachments open as blank pages in the browser,technical_issue
+The app logs me into the wrong workspace after refreshing,technical_issue
+Saving a form clears all the fields instead of submitting,technical_issue
+The video player shows a black screen with no sound,technical_issue
+Drag and drop stopped working in the task board,technical_issue
+The keyboard disappears on Android while typing a comment,technical_issue
+Emails from the system are sent hours late,technical_issue
+The calendar shows events on the wrong day after daylight saving time,technical_issue
+Clicking the export button shows a spinner forever,technical_issue
+Text in the editor gets duplicated when I press enter,technical_issue
+The link in the reset email points to a 404 page,technical_issue
+I get a certificate error when opening the site on Safari,technical_issue
+Two users editing the same document overwrite each other,technical_issue
+The mobile app drains my battery even when closed,technical_issue
+Filters reset every time I change the page,technical_issue
+The map widget never finishes loading,technical_issue
+The API responds with a 429 error even though we send very few requests,technical_issue
+Notifications show a count but the list is empty,technical_issue
+The print preview cuts off the right side of the page,technical_issue
+I cannot sign in with my Microsoft account anymore,account_access
+The invitation email to join the team goes to my old address,account_access
+My admin cannot find my user to give me permissions,account_access
+I want to enable login with a passkey instead of a password,account_access
+How do I change my username shown to other members,account_access
+I get an error saying my session has expired right after logging in,account_access
+My account shows a different name than the one I registered with,account_access
+I need access to a project that belongs to a colleague who left,account_access
+Please unlock my account which was suspended for suspicious activity,account_access
+The password requirements page does not accept my new password,account_access
+I have two accounts and want to close the older one,account_access
+Our team admin left and nobody can manage the workspace now,account_access
+How do I revoke access for an app I connected to my account,account_access
+I signed up with the wrong email and cannot verify it,account_access
+My email address was changed without my permission,account_access
+Where can I see the login history for my account,account_access
+Can I sign in with my phone number instead of email,account_access
+My invitation link says it has already been used,account_access
+I want to require two-factor authentication for everyone in my team,account_access
+I am a member of the organization but cannot see any projects,account_access
+Could you add an option to export the whole workspace as a backup,feature_request
+I would like to receive notifications on Microsoft Teams,feature_request
+Please add a way to sort tickets by priority,feature_request
+It would be great to pin important messages to the top,feature_request
+Can you add recurring tasks that repeat every week,feature_request
+We would like a custom domain for our public help center,feature_request
+Please add the ability to merge duplicate tickets,feature_request
+A mobile version of the reports page would be nice,feature_request
+Could the editor support tables and code blocks,feature_request
+It would help to set a default assignee per project,feature_request
+Please add an offline mode to the mobile app,feature_request
+Can you add emoji reactions to comments,feature_request
+We need role-based dashboards for managers and agents,feature_request
+It would be useful to have a changelog inside the app,feature_request
+Please add a way to snooze a ticket until a later date,feature_request
+Can you support importing tickets from a spreadsheet,feature_request
+Add the option to hide completed tasks from the list,feature_request
+Could we get a shared inbox for the whole support team,feature_request
+Please add a Zapier integration,feature_request
+It would be great to have a satisfaction survey after each ticket,feature_request
