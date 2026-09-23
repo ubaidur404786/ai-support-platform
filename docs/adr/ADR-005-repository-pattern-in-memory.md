@@ -1,6 +1,10 @@
 # ADR-005 — Repository pattern, with an in-memory implementation for now
 
-Status: accepted (v1) · superseded in part when persistent storage arrives
+Status: superseded by [ADR-007](ADR-007-postgresql-system-of-record.md) in v2
+
+The interface described here was kept; the in-memory implementation was replaced by PostgreSQL
+and moved to `tests/fakes.py` as a test double. The swap touched one file in the application
+plus one type hint in the service — the outcome this decision was designed for.
 
 ## Context
 
