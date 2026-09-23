@@ -1,10 +1,13 @@
 """HTTP tests for the tickets endpoints."""
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings
+from app.classification.dependencies import get_classifier
 from app.main import create_app
+from app.tickets.dependencies import get_repository
+from app.tickets.repository import StorageError
 
 
 def test_create_ticket_classifies_and_stores(tickets_client):
@@ -107,23 +110,73 @@ def test_create_rejects_invalid_input(tickets_client, payload):
     assert tickets_client.post("/tickets", json=payload).status_code == 422
 
 
-def test_create_returns_503_when_model_missing():
-    # Tickets depend on the classifier, so a missing model must fail the same
-    # controlled way /classify does - not with a crash.
-    broken_app = create_app(Settings(classifier_path="models/does_not_exist.joblib"))
+def test_create_returns_503_when_model_missing(tickets_client):
+    # dependency_overrides replaces a dependency for testing. It is the reason
+    # endpoints ask for what they need instead of fetching it themselves.
+    def no_model():
+        raise HTTPException(status_code=503, detail="Model is not loaded")
 
-    with TestClient(broken_app) as broken_client:
-        response = broken_client.post("/tickets", json={"text": "I cannot log in"})
-
+    tickets_client.app.dependency_overrides[get_classifier] = no_model
+    try:
+        response = tickets_client.post("/tickets", json={"text": "I cannot log in"})
         assert response.status_code == 503
         assert response.json()["detail"] == "Model is not loaded"
+    finally:
+        tickets_client.app.dependency_overrides.clear()
 
 
-def test_tickets_do_not_survive_a_restart(tickets_client):
-    """The in-memory store is per-process. This documents that limitation."""
+def test_endpoints_return_503_when_storage_fails(tickets_client):
+    class BrokenRepository:
+        def add(self, ticket):
+            raise StorageError("connection refused")
+
+        def get(self, ticket_id):
+            raise StorageError("connection refused")
+
+        def list(self, label=None, needs_review=None):
+            raise StorageError("connection refused")
+
+        def count(self):
+            raise StorageError("connection refused")
+
+    tickets_client.app.dependency_overrides[get_repository] = BrokenRepository
+    try:
+        assert tickets_client.post("/tickets", json={"text": "I cannot log in"}).status_code == 503
+        assert tickets_client.get("/tickets/1").status_code == 503
+        assert tickets_client.get("/tickets").status_code == 503
+    finally:
+        tickets_client.app.dependency_overrides.clear()
+
+def test_tickets_survive_a_restart(tickets_client):
+    """What v1 could not do: state outlives the process that created it."""
     tickets_client.post("/tickets", json={"text": "I need a refund for my payment"})
-    assert tickets_client.get("/tickets").json()["total"] == 1
 
     # A new app instance is the closest thing to restarting the server.
     with TestClient(create_app()) as restarted:
-        assert restarted.get("/tickets").json()["total"] == 0
+        body = restarted.get("/tickets").json()
+
+    assert body["total"] == 1
+    assert body["items"][0]["text"] == "I need a refund for my payment"
+
+def test_two_app_instances_share_one_database(tickets_client):
+    """In v1 these were two separate worlds; now they are one."""
+    created = tickets_client.post("/tickets", json={"text": "I cannot log in"}).json()
+
+    with TestClient(create_app()) as other_instance:
+        fetched = other_instance.get(f"/tickets/{created['id']}").json()
+
+    assert fetched == created
+
+
+def test_ids_come_from_the_database_sequence(tickets_client):
+    """Ids are assigned by PostgreSQL, not by any application process.
+
+    This is what makes duplicate ids impossible across replicas - and it is why
+    the service must not set id itself.
+    """
+    ids = [
+        tickets_client.post("/tickets", json={"text": f"ticket number {i}"}).json()["id"]
+        for i in range(1, 4)
+    ]
+
+    assert ids == [1, 2, 3]

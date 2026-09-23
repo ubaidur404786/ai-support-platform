@@ -4,7 +4,7 @@ import logging
 
 from app.classification.classifier import TicketClassifier
 from app.tickets.models import Ticket
-from app.tickets.repository import InMemoryTicketRepository
+from app.tickets.repository import TicketRepository
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class TicketService:
     def __init__(
         self,
-        repository: InMemoryTicketRepository,
+        repository: TicketRepository,
         classifier: TicketClassifier,
         low_confidence_threshold: float,
     ) -> None:
@@ -37,7 +37,7 @@ class TicketService:
             )
 
         ticket = Ticket(
-            id=0,  # replaced by the repository when the ticket is stored
+            
             text=text,
             label=prediction.label,
             confidence=prediction.confidence,

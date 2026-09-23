@@ -1,41 +1,93 @@
-"""Storage for tickets.
+"""Storage for tickets, backed by PostgreSQL."""
 
-Everything that touches storage goes through this class. Today it is a
-dictionary in memory; in a later version the same methods will run SQL against
-PostgreSQL, and the service and router will not change.
-"""
+from contextlib import contextmanager
+from typing import Protocol
 
-import threading
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.tickets.models import Ticket
 
 
-class InMemoryTicketRepository:
-    def __init__(self) -> None:
-        self._tickets: dict[int, Ticket] = {}
-        self._next_id = 1
-        # FastAPI runs synchronous endpoints in a thread pool, so two requests
-        # can reach this object at the same time. Without a lock, both could
-        # read the same _next_id and one ticket would overwrite the other.
-        self._lock = threading.Lock()
+class StorageError(RuntimeError):
+    """Storage is unavailable or a query failed.
+
+    The service and router must not depend on SQLAlchemy's exception types, or
+    swapping the database would change code in every layer. Database errors are
+    translated here into one error that the upper layers own.
+    """
+
+
+class TicketRepository(Protocol):
+    """What the service needs from storage.
+
+    A Protocol describes a shape rather than a base class: any object with these
+    methods satisfies it, without inheriting anything. The service depends on
+    this, not on PostgreSQL.
+    """
+
+    def add(self, ticket: Ticket) -> Ticket: ...
+
+    def get(self, ticket_id: int) -> Ticket | None: ...
+
+    def list(
+        self, label: str | None = None, needs_review: bool | None = None
+    ) -> list[Ticket]: ...
+
+    def count(self) -> int: ...
+
+
+@contextmanager
+def _translated_errors(session: Session):
+    """Turn any SQLAlchemy failure into StorageError, leaving no open transaction.
+
+    A failed statement leaves the session in a broken state until it is rolled
+    back; the next query on it would fail for the wrong reason and hide the real
+    cause.
+    """
+    try:
+        yield
+    except SQLAlchemyError as error:
+        session.rollback()
+        raise StorageError(str(error)) from error
+
+
+class PostgresTicketRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
 
     def add(self, ticket: Ticket) -> Ticket:
-        with self._lock:
-            ticket.id = self._next_id
-            self._next_id += 1
-            self._tickets[ticket.id] = ticket
+        with _translated_errors(self._session):
+            self._session.add(ticket)
+            # commit writes the transaction durably and makes the row visible to
+            # every other connection and process. The id comes from a database
+            # sequence, so two processes inserting at the same moment cannot
+            # receive the same id - the failure demonstrated in v1.
+            self._session.commit()
         return ticket
 
     def get(self, ticket_id: int) -> Ticket | None:
-        return self._tickets.get(ticket_id)
+        with _translated_errors(self._session):
+            # session.get() looks up by primary key and returns None if absent.
+            return self._session.get(Ticket, ticket_id)
 
-    def list(self, label: str | None = None, needs_review: bool | None = None) -> list[Ticket]:
-        tickets = list(self._tickets.values())
-        if label is not None:
-            tickets = [t for t in tickets if t.label == label]
-        if needs_review is not None:
-            tickets = [t for t in tickets if t.needs_review is needs_review]
-        return sorted(tickets, key=lambda t: t.id)
+    def list(
+        self, label: str | None = None, needs_review: bool | None = None
+    ) -> list[Ticket]:
+        with _translated_errors(self._session):
+            # select() builds a SQL query. Filters become WHERE conditions, so
+            # PostgreSQL does the filtering instead of Python loading every row.
+            statement = select(Ticket)
+            if label is not None:
+                statement = statement.where(Ticket.label == label)
+            if needs_review is not None:
+                statement = statement.where(Ticket.needs_review == needs_review)
+            statement = statement.order_by(Ticket.id)
+            # scalars() returns the Ticket objects rather than one-column rows.
+            return list(self._session.scalars(statement))
 
     def count(self) -> int:
-        return len(self._tickets)
+        with _translated_errors(self._session):
+            # COUNT(*) is computed by the database; no rows are transferred.
+            return self._session.scalar(select(func.count()).select_from(Ticket)) or 0

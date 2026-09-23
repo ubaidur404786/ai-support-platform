@@ -12,6 +12,7 @@ def test_health_reports_model_loaded(client):
 
     assert response.status_code == 200
     body = response.json()
+    assert body["database_reachable"] is True
     assert body["status"] == "ok"
     assert body["model_loaded"] is True
     assert body["model_version"] == "v0.1.0"
@@ -74,3 +75,19 @@ def test_classify_returns_500_when_prediction_crashes(client, monkeypatch):
     assert response.status_code == 500
     # The client gets a generic message; the real error goes to the log only.
     assert response.json()["detail"] == "Prediction failed"
+
+def test_health_reports_database_unreachable(client, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    from app.health import router as health_router
+
+    def broken_connect():
+        raise OperationalError("SELECT 1", {}, Exception("connection refused"))
+
+    monkeypatch.setattr(health_router.engine, "connect", broken_connect)
+
+    body = client.get("/health").json()
+
+    # Still HTTP 200: health reports problems, it does not become one.
+    assert body["database_reachable"] is False
+    assert body["status"] == "degraded"

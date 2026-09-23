@@ -1,0 +1,31 @@
+# Runs the services the platform depends on locally.
+# Start with:  docker compose up -d
+# Stop with:   docker compose down
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: ai-support-db
+    environment:
+      # Local development credentials only. Real deployments take these from
+      # the environment or a secret manager - never from a committed file.
+      POSTGRES_USER: support
+      POSTGRES_PASSWORD: support
+      POSTGRES_DB: support_platform
+    ports:
+      # host:container - the app on your machine connects to localhost:5432
+      - "5432:5432"
+    volumes:
+      # A named volume keeps the data when the container is recreated.
+      # Without this, "docker compose down" would lose every row.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Docker runs this to decide whether the database is ready to accept
+      # connections. "started" is not the same as "ready".
+      test: ["CMD-SHELL", "pg_isready -U support -d support_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:

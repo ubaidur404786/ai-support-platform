@@ -3,9 +3,9 @@
 import pytest
 
 from app.classification.classifier import Prediction
-from app.tickets.repository import InMemoryTicketRepository
+# from app.tickets.repository import InMemoryTicketRepository
 from app.tickets.service import TicketService
-
+from tests.fakes import InMemoryTicketRepository
 
 class FakeClassifier:
     """Returns a fixed prediction, so tests control confidence exactly.

@@ -13,3 +13,8 @@ joblib>=1.4               # Saves/loads the trained model file (scikit-learn's r
 # --- Testing ---------------------------------------------------------------
 pytest>=8.3               # Test runner
 httpx>=0.27               # HTTP client required by FastAPI's TestClient
+
+# --- Database --------------------------------------------------------------
+sqlalchemy>=2.0           # Maps Python objects to database rows and builds the SQL
+psycopg[binary]>=3.2      # PostgreSQL driver ([binary] ships a compiled wheel, no build tools needed)
+alembic>=1.13   

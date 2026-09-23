@@ -10,7 +10,7 @@ from app.classification.router import router as classification_router
 from app.core.config import Settings, settings
 from app.core.logging import configure_logging
 from app.health.router import router as health_router
-from app.tickets.repository import InMemoryTicketRepository
+
 from app.tickets.router import router as tickets_router
 logger = logging.getLogger(__name__)
 
@@ -20,10 +20,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # One repository per application instance, so tests get a clean store.
-        # Created before the model: storage does not depend on the classifier,
-        # and must exist even when the model fails to load.
-        app.state.ticket_repository = InMemoryTicketRepository()
+       
 
         try:
             app.state.classifier = TicketClassifier.load(app_settings.classifier_path)
@@ -35,7 +32,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         yield
 
         app.state.classifier = None
-        app.state.ticket_repository = None
+        
 
     app = FastAPI(
         title=app_settings.app_name,

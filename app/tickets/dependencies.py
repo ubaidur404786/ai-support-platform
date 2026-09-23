@@ -1,22 +1,24 @@
 """Wiring for the tickets module."""
 
-from fastapi import Depends, Request
+from fastapi import Depends
+from sqlalchemy.orm import Session
 
 from app.classification.classifier import TicketClassifier
 from app.classification.dependencies import get_classifier
 from app.core.config import settings
-from app.tickets.repository import InMemoryTicketRepository
+from app.core.database import get_session
+from app.tickets.repository import PostgresTicketRepository, TicketRepository
 from app.tickets.service import TicketService
 
 
-def get_repository(request: Request) -> InMemoryTicketRepository:
-    # One repository for the whole process, created at startup, so tickets
-    # submitted by one request are visible to the next one.
-    return request.app.state.ticket_repository
+def get_repository(session: Session = Depends(get_session)) -> TicketRepository:
+    # A repository per request, bound to that request's session. It is no longer
+    # shared application state: the shared thing is now the database itself.
+    return PostgresTicketRepository(session)
 
 
 def get_ticket_service(
-    repository: InMemoryTicketRepository = Depends(get_repository),
+    repository: TicketRepository = Depends(get_repository),
     classifier: TicketClassifier = Depends(get_classifier),
 ) -> TicketService:
     return TicketService(
