@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c62828"/>
+    </marker>
+  </defs>
+
+  <rect width="1000" height="700" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v1 — Modular Monolith</text>
+  <text x="30" y="56" fill="#555">Still one process and one Docker image. Inside, the code is split by feature, and each feature has the same internal layers.</text>
+  <text x="30" y="76" fill="#555">New in this version: a tickets module that classifies on submission, stores the result, and flags uncertain predictions for review.</text>
+
+  <!-- Client -->
+  <rect x="30" y="110" width="150" height="90" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="105" y="136" text-anchor="middle" font-weight="bold" fill="#222">Client</text>
+  <text x="105" y="160" text-anchor="middle" fill="#333" font-size="12">POST /tickets</text>
+  <text x="105" y="176" text-anchor="middle" fill="#333" font-size="12">GET /tickets/{id}</text>
+  <text x="105" y="192" text-anchor="middle" fill="#333" font-size="12">POST /classify</text>
+
+  <line x1="180" y1="155" x2="235" y2="155" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Monolith container -->
+  <rect x="235" y="100" width="735" height="300" rx="8" fill="#fafbfc" stroke="#999" stroke-dasharray="6,4"/>
+  <text x="248" y="120" font-size="12" font-weight="bold" fill="#888">ONE FASTAPI PROCESS — one deployable, one image</text>
+
+  <!-- tickets module -->
+  <rect x="255" y="132" width="230" height="250" rx="6" fill="#e8f0fe" stroke="#333" stroke-width="1.5"/>
+  <text x="370" y="154" text-anchor="middle" font-weight="bold" fill="#222">tickets module</text>
+
+  <rect x="270" y="166" width="200" height="42" rx="4" fill="#ffffff" stroke="#666"/>
+  <text x="280" y="183" fill="#222" font-size="12" font-weight="bold">router.py</text>
+  <text x="280" y="199" fill="#555" font-size="11">HTTP only: status codes, 404</text>
+
+  <rect x="270" y="216" width="200" height="42" rx="4" fill="#ffffff" stroke="#666"/>
+  <text x="280" y="233" fill="#222" font-size="12" font-weight="bold">service.py</text>
+  <text x="280" y="249" fill="#555" font-size="11">business logic, no HTTP</text>
+
+  <rect x="270" y="266" width="200" height="42" rx="4" fill="#ffffff" stroke="#666"/>
+  <text x="280" y="283" fill="#222" font-size="12" font-weight="bold">repository.py</text>
+  <text x="280" y="299" fill="#555" font-size="11">storage: dict in memory</text>
+
+  <rect x="270" y="316" width="200" height="42" rx="4" fill="#ffffff" stroke="#666"/>
+  <text x="280" y="333" fill="#222" font-size="12" font-weight="bold">models.py / schemas.py</text>
+  <text x="280" y="349" fill="#555" font-size="11">domain object / API shapes</text>
+
+  <!-- vertical arrows inside tickets -->
+  <line x1="490" y1="187" x2="510" y2="187" stroke="#333" stroke-width="1.2"/>
+  <path d="M 370 208 L 370 216" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M 370 258 L 370 266" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- classification module -->
+  <rect x="520" y="132" width="220" height="150" rx="6" fill="#e6f4ea" stroke="#333" stroke-width="1.5"/>
+  <text x="630" y="154" text-anchor="middle" font-weight="bold" fill="#222">classification module</text>
+  <text x="630" y="178" text-anchor="middle" fill="#333" font-size="12">TF-IDF + Logistic Regression</text>
+  <text x="630" y="196" text-anchor="middle" fill="#333" font-size="12">loaded once at startup</text>
+  <text x="630" y="220" text-anchor="middle" fill="#555" font-size="11">router.py  ·  classifier.py</text>
+  <text x="630" y="236" text-anchor="middle" fill="#555" font-size="11">dependencies.py  ·  schemas.py</text>
+  <text x="630" y="262" text-anchor="middle" fill="#666" font-size="11">get_classifier() raises 503</text>
+
+  <!-- arrow service -> classification -->
+  <path d="M 470 237 L 520 200" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="500" y="228" font-size="11" fill="#333">predict()</text>
+
+  <!-- core + health -->
+  <rect x="520" y="296" width="105" height="86" rx="6" fill="#fff8e1" stroke="#333" stroke-width="1.5"/>
+  <text x="572" y="318" text-anchor="middle" font-weight="bold" fill="#222" font-size="12">core</text>
+  <text x="572" y="338" text-anchor="middle" fill="#555" font-size="11">settings</text>
+  <text x="572" y="354" text-anchor="middle" fill="#555" font-size="11">logging</text>
+  <text x="572" y="372" text-anchor="middle" fill="#555" font-size="11">shared only</text>
+
+  <rect x="635" y="296" width="105" height="86" rx="6" fill="#fff8e1" stroke="#333" stroke-width="1.5"/>
+  <text x="687" y="318" text-anchor="middle" font-weight="bold" fill="#222" font-size="12">health</text>
+  <text x="687" y="338" text-anchor="middle" fill="#555" font-size="11">GET /health</text>
+  <text x="687" y="358" text-anchor="middle" fill="#555" font-size="11">reports whether</text>
+  <text x="687" y="373" text-anchor="middle" fill="#555" font-size="11">the model loaded</text>
+
+  <!-- main.py -->
+  <rect x="770" y="132" width="180" height="150" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="860" y="154" text-anchor="middle" font-weight="bold" fill="#222">main.py</text>
+  <text x="860" y="176" text-anchor="middle" fill="#555" font-size="12">create_app()</text>
+  <text x="860" y="200" text-anchor="middle" fill="#333" font-size="11">loads the model once</text>
+  <text x="860" y="216" text-anchor="middle" fill="#333" font-size="11">creates the repository</text>
+  <text x="860" y="232" text-anchor="middle" fill="#333" font-size="11">registers the routers</text>
+  <text x="860" y="258" text-anchor="middle" fill="#666" font-size="11">wiring lives here,</text>
+  <text x="860" y="273" text-anchor="middle" fill="#666" font-size="11">not in the modules</text>
+
+  <!-- example -->
+  <rect x="30" y="420" width="450" height="90" rx="4" fill="#fafafa" stroke="#bbb" stroke-dasharray="3,3"/>
+  <text x="42" y="440" font-size="11" fill="#888" font-weight="bold">Example: POST /tickets</text>
+  <text x="42" y="460" font-family="Consolas, monospace" font-size="11" fill="#222">request   {"text": "I was charged twice for my subscription"}</text>
+  <text x="42" y="480" font-family="Consolas, monospace" font-size="11" fill="#222">201       {"id": 1, "label": "billing", "confidence": 0.85,</text>
+  <text x="42" y="496" font-family="Consolas, monospace" font-size="11" fill="#222">           "needs_review": false, "created_at": "..."}</text>
+
+  <rect x="510" y="420" width="460" height="90" rx="4" fill="#fafafa" stroke="#bbb" stroke-dasharray="3,3"/>
+  <text x="522" y="440" font-size="11" fill="#888" font-weight="bold">Low confidence is flagged, not hidden</text>
+  <text x="522" y="460" font-family="Consolas, monospace" font-size="11" fill="#222">request   {"text": "hello"}</text>
+  <text x="522" y="480" font-family="Consolas, monospace" font-size="11" fill="#222">201       {"label": "technical_issue", "confidence": 0.31,</text>
+  <text x="522" y="496" font-family="Consolas, monospace" font-size="11" fill="#222">           "needs_review": true}   &lt; threshold 0.55</text>
+
+  <!-- limitation block -->
+  <text x="30" y="548" font-size="12" font-weight="bold" fill="#c62828" letter-spacing="1">MEASURED LIMITATION — STATE LIVES INSIDE THE PROCESS</text>
+
+  <rect x="30" y="562" width="215" height="70" rx="6" fill="#ffffff" stroke="#c62828" stroke-width="1.5"/>
+  <text x="137" y="584" text-anchor="middle" font-weight="bold" fill="#222" font-size="12">Process A (port 8000)</text>
+  <text x="137" y="604" text-anchor="middle" fill="#333" font-size="11">POST /tickets → id 1</text>
+  <text x="137" y="620" text-anchor="middle" fill="#555" font-size="11">own dict, own id counter</text>
+
+  <rect x="285" y="562" width="215" height="70" rx="6" fill="#ffffff" stroke="#c62828" stroke-width="1.5"/>
+  <text x="392" y="584" text-anchor="middle" font-weight="bold" fill="#222" font-size="12">Process B (port 8001)</text>
+  <text x="392" y="604" text-anchor="middle" fill="#333" font-size="11">GET /tickets → total 0</text>
+  <text x="392" y="620" text-anchor="middle" fill="#555" font-size="11">cannot see ticket 1</text>
+
+  <line x1="245" y1="597" x2="285" y2="597" stroke="#c62828" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-red)"/>
+
+  <rect x="520" y="562" width="450" height="70" rx="4" fill="#fdf0ef" stroke="#c62828"/>
+  <text x="532" y="582" font-size="12" fill="#222">Two replicas produce duplicate ids and reads that miss recent writes.</text>
+  <text x="532" y="600" font-size="12" fill="#222">The cheap fix for v0's ~80 req/s ceiling — run more workers — is blocked</text>
+  <text x="532" y="618" font-size="12" fill="#222">by the storage design. This is the trigger for a shared database (v2).</text>
+
+  <rect x="30" y="648" width="940" height="34" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="42" y="670" font-size="12" fill="#222"><tspan font-weight="bold">Measured locally, same session:</tspan> v0 57.7 req/s (P50 16.4 ms) · v1 /classify 55.2 req/s (P50 16.9 ms) · v1 /tickets 54.1 req/s (P50 17.8 ms) · 43 tests passing.</text>
+</svg>
