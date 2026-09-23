@@ -32,7 +32,9 @@ async def send_one(client: httpx.AsyncClient, url: str, text: str) -> tuple[floa
     started = time.perf_counter()
     try:
         response = await client.post(url, json={"text": text}, timeout=10.0)
-        ok = response.status_code == 200
+        # ok = response.status_code == 200
+                # 2xx is success; POST /tickets returns 201, not 200.
+        ok = 200 <= response.status_code < 300
     except httpx.HTTPError:
         ok = False
     return (time.perf_counter() - started) * 1000, ok  # milliseconds

@@ -12,8 +12,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.1.0"
+    app_version: str = "0.2.0"
     classifier_path: str = "models/ticket_classifier.joblib"
+        # Predictions below this confidence are flagged for a human to review.
+    low_confidence_threshold: float = 0.55
     log_level: str = "INFO"
 
     # Read a .env file if present; real environment variables take priority over it.

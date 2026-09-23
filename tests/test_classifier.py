@@ -3,8 +3,8 @@
 
 import pytest
 
-from app.classifier import TicketClassifier
-from app.config import settings
+from app.classification.classifier import TicketClassifier
+from app.core.config import settings
 
 
 @pytest.fixture(scope="module")
