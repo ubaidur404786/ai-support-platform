@@ -35,7 +35,17 @@ class TicketResponse(BaseModel):
 
 
 class TicketListResponse(BaseModel):
-    # Returning an object rather than a bare list leaves room to add paging
-    # fields later without breaking clients.
+    """One page of tickets.
+
+    The v1 decision to return an object rather than a bare list pays off here:
+    limit and offset were added without breaking any existing client, which a
+    top-level JSON array could not have done.
+    """
+
+    # How many tickets match the filters in total - not how many are in `items`.
     total: int
+    # Echoed back so a client always knows which window it received, even when
+    # it sent no parameters and the server chose the defaults.
+    limit: int
+    offset: int
     items: list[TicketResponse]

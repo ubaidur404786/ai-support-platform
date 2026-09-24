@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v2 — PostgreSQL** (branch `v2-postgresql`)
+**Current version: v3 — Pagination** (branch `v3-pagination`)
 
 ## 1. Project Overview
 
@@ -14,7 +14,7 @@ controlled actions such as creating or updating tickets.
 
 The engineering goal is a production-style AI system whose every component can be justified:
 what problem forced it in, what it costs, and what happens when it fails. The architecture
-history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`, ...)
+history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`, `v3-pagination`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -32,13 +32,14 @@ a human steps in where the model is unsure rather than everywhere.
 | Automatic classification on ticket submission, with the result stored | Available | v1 |
 | Low-confidence predictions flagged for human review | Available | v1 |
 | Durable, queryable ticket history shared across processes | Available | v2 |
+| Paged, bounded ticket listing with filters | Available | v3 |
 | Knowledge base search and retrieval-augmented answers | Planned | — |
 | Controlled actions (create / update tickets) with human approval | Planned | — |
 | Model evaluation, monitoring, and safe rollout | Planned | — |
 
 ## 4. Current Architecture
 
-![v2 architecture](docs/architecture/v2.svg)
+![v3 architecture](docs/architecture/v3.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. No cache, queue, or
@@ -70,7 +71,10 @@ router turns into **503** — the request was valid and can be retried. Any othe
 exception → 500 with a generic message and a logged traceback.
 
 `GET /tickets/{id}` returns 200 or 404. `GET /tickets` accepts `label` and `needs_review`
-filters, which become SQL `WHERE` conditions. `POST /classify` classifies without storing.
+filters plus `limit` and `offset`, all of which become SQL. An oversized `limit` is rejected
+with 422 before the handler runs, and the service clamps it again for callers that do not
+arrive over HTTP ([ADR-011](docs/adr/ADR-011-bounded-work-per-request.md)). `POST /classify`
+classifies without storing.
 `GET /health` reports `model_loaded`, `model_version`, and `database_reachable`, and downgrades
 `status` to `degraded` when either is unavailable.
 
@@ -116,6 +120,7 @@ the model file and its metrics are produced at training time.
 | Model | scikit-learn (TF-IDF + Logistic Regression), joblib | Kilobyte-sized, ~2 ms CPU inference, standard metrics |
 | Storage | PostgreSQL 17, SQLAlchemy 2.0 (sync), psycopg 3 | Durable, shared, queryable; see [ADR-007](docs/adr/ADR-007-postgresql-system-of-record.md) and [ADR-008](docs/adr/ADR-008-sqlalchemy-orm-sync-sessions.md) |
 | Schema | Alembic | Versioned migrations; also builds the test database |
+| Paging | Offset pagination (`LIMIT`/`OFFSET`) | Bounded responses; see [ADR-010](docs/adr/ADR-010-offset-pagination.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
 
@@ -124,9 +129,9 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v2 — PostgreSQL.** See [docs/versions/v2-postgresql.md](docs/versions/v2-postgresql.md) for
+**v3 — Pagination.** See [docs/versions/v3-pagination.md](docs/versions/v3-pagination.md) for
 the full problem / solution / trade-off / measurement write-up, and
-[docs/versions/v2-postgresql/README.md](docs/versions/v2-postgresql/README.md) for a short guide.
+[docs/versions/v3-pagination/README.md](docs/versions/v3-pagination/README.md) for a short guide.
 
 ## 10. Version Evolution
 
@@ -135,7 +140,8 @@ the full problem / solution / trade-off / measurement write-up, and
 | v0 | `v0-baseline` | A support ticket needs to be classified over HTTP with a free, local model | Complete |
 | v1 | `v1-modular-monolith` | Tickets must be stored and uncertainty made visible; the flat layout has nowhere to put business logic | Complete |
 | v2 | `v2-postgresql` | State lives inside the process: data is lost on restart, cannot be shared between replicas, and blocks running more workers | Complete |
-| v3 | — | `GET /tickets` has no paging: 13,006 rows took 2.18 s and returned everything | Next |
+| v3 | `v3-pagination` | `GET /tickets` had no paging: 13,000 rows took 2.18 s and returned everything, letting the caller choose the server's workload | Complete |
+| v4 | — | `total` costs 60x the page query it accompanies (22.3 ms vs 0.36 ms) | Next |
 
 Old branches remain on GitHub as engineering history.
 
@@ -164,7 +170,8 @@ Interactive API docs: http://127.0.0.1:8000/docs
 
 ```bash
 curl -X POST http://127.0.0.1:8000/tickets -H "Content-Type: application/json" -d '{"text": "I was charged twice for my subscription"}'
-curl "http://127.0.0.1:8000/tickets?needs_review=true"
+curl "http://127.0.0.1:8000/tickets?needs_review=true&limit=20"
+curl "http://127.0.0.1:8000/tickets?limit=50&offset=50"
 ```
 
 Configuration (environment variables or `.env`, see `.env.example`):
@@ -174,6 +181,8 @@ Configuration (environment variables or `.env`, see `.env.example`):
 | `APP_NAME` | `AI Support Platform` | Title shown in API docs |
 | `CLASSIFIER_PATH` | `models/ticket_classifier.joblib` | Model artifact to load at startup |
 | `LOW_CONFIDENCE_THRESHOLD` | `0.55` | Predictions below this are flagged `needs_review` |
+| `DEFAULT_PAGE_SIZE` | `50` | Page size when the client does not specify one |
+| `MAX_PAGE_SIZE` | `200` | Hard ceiling; a larger `limit` is rejected with 422 |
 | `DATABASE_URL` | `postgresql+psycopg://support:support@localhost:5432/support_platform` | Database connection |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | `5` / `10` | Connections per process — workers × (pool + overflow) must stay under PostgreSQL's limit |
 | `DB_ECHO` | `false` | Print every SQL statement |
@@ -194,10 +203,11 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-47 tests:
+70 tests:
 
-- **API tests** against a real PostgreSQL database — create / read / list / filter, with tables
-  truncated before each test so ids are predictable.
+- **API tests** against a real PostgreSQL database — create / read / list / filter / paginate,
+  with tables truncated before each test so ids are predictable. The clearest one walks every
+  page and asserts the ids come back with no duplicates and no gaps.
 - **Failure cases** — invalid input (six variants), unknown id (404), non-numeric id (422),
   model not loaded (503), storage unavailable (503 on all three ticket endpoints), prediction
   crash (500), database unreachable (health reports `degraded`).
@@ -236,6 +246,8 @@ results are flagged rather than trusted.
 - [ADR-007 — PostgreSQL as the system of record](docs/adr/ADR-007-postgresql-system-of-record.md)
 - [ADR-008 — SQLAlchemy ORM with synchronous sessions](docs/adr/ADR-008-sqlalchemy-orm-sync-sessions.md)
 - [ADR-009 — Versioned migrations from the first table](docs/adr/ADR-009-alembic-migrations.md)
+- [ADR-010 — Offset pagination for list endpoints](docs/adr/ADR-010-offset-pagination.md)
+- [ADR-011 — Every request must do a bounded amount of work](docs/adr/ADR-011-bounded-work-per-request.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -249,6 +261,16 @@ session**:
 | v2 | `/tickets` (PostgreSQL) | 1 | 27.6 req/s | 33.9 ms | 51.2 ms | 93.3 ms |
 | v2 | `/classify` (no database) | 1 | 50.0 req/s | 16.1 ms | 42.4 ms | 66.5 ms |
 | v2 | `/tickets` | 10 | 44.5 req/s | 190.7 ms | 420.8 ms | 717.0 ms |
+
+Listing, with 13,000 rows in the table (client-measured, includes client JSON parsing):
+
+| Version | Request | Rows returned | Time |
+|---|---|---|---|
+| v2 | `GET /tickets` (unpaged) | 13,000 | 2180 ms |
+| v3 | `GET /tickets?limit=50` | 50 | ~90 ms |
+
+The server's work is now a function of `limit`, not of table size. In the database the page
+query itself executes in 0.36 ms.
 
 Model inference alone is 1.7 ms. A durable write costs about **+14.5 ms at P50** — the price of
 durability, stated rather than hidden. The endpoint that writes nothing is unchanged.
@@ -266,15 +288,20 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
 
 **Known limitations, all measured:**
 
-1. *No paging.* `GET /tickets` with 13,006 rows returned every one of them and took 2.18 s.
-   One client can occupy the server for two seconds. This is the next thing to fix.
-2. *Multi-worker scaling is unverified on this machine.* Four workers gave no gain over one
+1. *`total` costs more than the data it accompanies.* The `COUNT` query runs on every list
+   request and executes in 22.3 ms against 0.36 ms for the page — roughly 60 to 1. PostgreSQL
+   cannot store a row count, because under MVCC the number of visible rows depends on the asking
+   transaction. This is the next thing to address.
+2. *Deep pages do work they discard.* `OFFSET 12900` made PostgreSQL walk 12,950 index entries
+   to return 50 rows — 17x the first page, growing linearly. Only 6 ms at this size and
+   invisible through HTTP, which is why keyset pagination has not replaced offset yet.
+3. *Multi-worker scaling is unverified on this machine.* Four workers gave no gain over one
    (44.8 vs 44.5 req/s), and PostgreSQL showed only one worker's pool in use during the run —
    consistent with Windows lacking `SO_REUSEPORT`, but not proven. No horizontal-scaling claim
    is made from these numbers.
-3. *Serial inference per process.* Carried over from v0. The database's I/O wait masks it
+4. *Serial inference per process.* Carried over from v0. The database's I/O wait masks it
    slightly; a heavier model would expose it immediately.
-4. *An open index question.* `needs_review` is not indexed, on the assumption that roughly half
+5. *An open index question.* `needs_review` is not indexed, on the assumption that roughly half
    the rows would match. In the generated data only 4% do, which is selective enough that a
    partial index would likely help. The right answer depends on the real flag rate.
 

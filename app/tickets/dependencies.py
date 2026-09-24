@@ -25,4 +25,6 @@ def get_ticket_service(
         repository=repository,
         classifier=classifier,
         low_confidence_threshold=settings.low_confidence_threshold,
+        default_page_size=settings.default_page_size,
+        max_page_size=settings.max_page_size,
     )

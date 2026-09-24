@@ -36,8 +36,8 @@ class InMemoryTicketRepository:
     def get(self, ticket_id: int) -> Ticket | None:
         return self._tickets.get(ticket_id)
 
-    def list(
-        self, label: str | None = None, needs_review: bool | None = None
+    def _filtered(
+        self, label: str | None, needs_review: bool | None
     ) -> list[Ticket]:
         tickets = list(self._tickets.values())
         if label is not None:
@@ -46,5 +46,19 @@ class InMemoryTicketRepository:
             tickets = [t for t in tickets if t.needs_review is needs_review]
         return sorted(tickets, key=lambda t: t.id)
 
-    def count(self) -> int:
-        return len(self._tickets)
+    def list(
+        self,
+        label: str | None = None,
+        needs_review: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Ticket]:
+        # A Python slice stands in for SQL's LIMIT/OFFSET. Note what this fake
+        # does NOT reproduce: the real database discards `offset` rows before
+        # returning any, and that work grows with depth. A fake can hide a cost.
+        return self._filtered(label, needs_review)[offset : offset + limit]
+
+    def count(
+        self, label: str | None = None, needs_review: bool | None = None
+    ) -> int:
+        return len(self._filtered(label, needs_review))

@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.classification.dependencies import get_classifier
+from app.core.config import settings
 from app.main import create_app
 from app.tickets.dependencies import get_repository
 from app.tickets.repository import StorageError
@@ -68,7 +69,8 @@ def test_get_ticket_with_non_numeric_id_returns_422(tickets_client):
 def test_list_is_empty_for_a_new_app(tickets_client):
     body = tickets_client.get("/tickets").json()
 
-    assert body == {"total": 0, "items": []}
+    assert body["total"] == 0
+    assert body["items"] == []
 
 
 def test_list_filters_by_label_and_review_flag(tickets_client):
@@ -92,7 +94,8 @@ def test_list_with_unknown_label_returns_empty(tickets_client):
 
     body = tickets_client.get("/tickets", params={"label": "does_not_exist"}).json()
 
-    assert body == {"total": 0, "items": []}
+    assert body["total"] == 0
+    assert body["items"] == []
 
 
 @pytest.mark.parametrize(
@@ -133,10 +136,10 @@ def test_endpoints_return_503_when_storage_fails(tickets_client):
         def get(self, ticket_id):
             raise StorageError("connection refused")
 
-        def list(self, label=None, needs_review=None):
+        def list(self, label=None, needs_review=None, limit=50, offset=0):
             raise StorageError("connection refused")
 
-        def count(self):
+        def count(self, label=None, needs_review=None):
             raise StorageError("connection refused")
 
     tickets_client.app.dependency_overrides[get_repository] = BrokenRepository
@@ -180,3 +183,107 @@ def test_ids_come_from_the_database_sequence(tickets_client):
     ]
 
     assert ids == [1, 2, 3]
+
+# --- Pagination -------------------------------------------------------------
+
+
+def _create_tickets(client, count: int) -> None:
+    for i in range(count):
+        client.post("/tickets", json={"text": f"I need a refund for payment {i}"})
+
+
+def test_list_applies_a_default_page_size(tickets_client):
+    """A client that asks for nothing must not receive everything."""
+    _create_tickets(tickets_client, 3)
+
+    body = tickets_client.get("/tickets").json()
+
+    assert body["limit"] == settings.default_page_size
+    assert body["offset"] == 0
+
+
+def test_limit_controls_how_many_are_returned(tickets_client):
+    _create_tickets(tickets_client, 5)
+
+    body = tickets_client.get("/tickets", params={"limit": 2}).json()
+
+    assert len(body["items"]) == 2
+    # total describes every matching ticket, not the page.
+    assert body["total"] == 5
+
+
+def test_offset_moves_the_window(tickets_client):
+    _create_tickets(tickets_client, 5)
+
+    first = tickets_client.get("/tickets", params={"limit": 2, "offset": 0}).json()
+    second = tickets_client.get("/tickets", params={"limit": 2, "offset": 2}).json()
+
+    assert [t["id"] for t in first["items"]] == [1, 2]
+    assert [t["id"] for t in second["items"]] == [3, 4]
+
+
+def test_pages_cover_every_ticket_exactly_once(tickets_client):
+    _create_tickets(tickets_client, 7)
+
+    seen: list[int] = []
+    offset = 0
+    while True:
+        body = tickets_client.get("/tickets", params={"limit": 3, "offset": offset}).json()
+        if not body["items"]:
+            break
+        seen.extend(t["id"] for t in body["items"])
+        offset += 3
+
+    # No duplicates and no gaps - the property that makes paging usable.
+    assert seen == [1, 2, 3, 4, 5, 6, 7]
+
+
+def test_offset_past_the_end_returns_an_empty_page(tickets_client):
+    _create_tickets(tickets_client, 2)
+
+    body = tickets_client.get("/tickets", params={"offset": 500}).json()
+
+    # Empty, not an error: the client asked a valid question about a page that
+    # happens to hold nothing. total still reports what exists.
+    assert body["items"] == []
+    assert body["total"] == 2
+
+
+def test_limit_above_the_maximum_is_rejected(tickets_client):
+    response = tickets_client.get(
+        "/tickets", params={"limit": settings.max_page_size + 1}
+    )
+
+    # 422, not a silently clamped page: the client is told its request was
+    # invalid instead of quietly receiving something it did not ask for.
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"limit": 0},
+        {"limit": -1},
+        {"limit": 10000},
+        {"offset": -1},
+        {"limit": "abc"},
+        {"offset": "abc"},
+    ],
+)
+def test_invalid_pagination_parameters_are_rejected(tickets_client, params):
+    assert tickets_client.get("/tickets", params=params).status_code == 422
+
+
+def test_pagination_combines_with_filters(tickets_client):
+    _create_tickets(tickets_client, 4)          # all billing
+    tickets_client.post("/tickets", json={"text": "hello"})  # low confidence
+
+    body = tickets_client.get(
+        "/tickets", params={"label": "billing", "limit": 2}
+    ).json()
+
+    assert len(body["items"]) == 2
+    # total must count only the filtered rows, or the client cannot know how
+    # many pages to request.
+    assert body["total"] == 4
+    assert all(t["label"] == "billing" for t in body["items"])

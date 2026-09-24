@@ -32,10 +32,16 @@ class TicketRepository(Protocol):
     def get(self, ticket_id: int) -> Ticket | None: ...
 
     def list(
-        self, label: str | None = None, needs_review: bool | None = None
+        self,
+        label: str | None = None,
+        needs_review: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[Ticket]: ...
 
-    def count(self) -> int: ...
+    def count(
+        self, label: str | None = None, needs_review: bool | None = None
+    ) -> int: ...
 
 
 @contextmanager
@@ -72,22 +78,47 @@ class PostgresTicketRepository:
             # session.get() looks up by primary key and returns None if absent.
             return self._session.get(Ticket, ticket_id)
 
+    def _filtered(self, statement, label: str | None, needs_review: bool | None):
+        """Apply the same WHERE conditions to any statement.
+
+        list() and count() must filter identically, or the reported total would
+        describe a different set of rows than the page returned. Sharing one
+        function is what guarantees that, instead of two copies staying in step
+        by luck.
+        """
+        if label is not None:
+            statement = statement.where(Ticket.label == label)
+        if needs_review is not None:
+            statement = statement.where(Ticket.needs_review == needs_review)
+        return statement
+
     def list(
-        self, label: str | None = None, needs_review: bool | None = None
+        self,
+        label: str | None = None,
+        needs_review: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[Ticket]:
         with _translated_errors(self._session):
             # select() builds a SQL query. Filters become WHERE conditions, so
             # PostgreSQL does the filtering instead of Python loading every row.
-            statement = select(Ticket)
-            if label is not None:
-                statement = statement.where(Ticket.label == label)
-            if needs_review is not None:
-                statement = statement.where(Ticket.needs_review == needs_review)
-            statement = statement.order_by(Ticket.id)
+            statement = self._filtered(select(Ticket), label, needs_review)
+
+            # ORDER BY must come before LIMIT, and must be on something stable.
+            # Without a deterministic order, "the first 50 rows" is whatever the
+            # database happens to return, and two pages could overlap or skip.
+            # id is immutable and unique, which makes it a safe sort key.
+            statement = statement.order_by(Ticket.id).limit(limit).offset(offset)
+
             # scalars() returns the Ticket objects rather than one-column rows.
             return list(self._session.scalars(statement))
 
-    def count(self) -> int:
+    def count(
+        self, label: str | None = None, needs_review: bool | None = None
+    ) -> int:
         with _translated_errors(self._session):
             # COUNT(*) is computed by the database; no rows are transferred.
-            return self._session.scalar(select(func.count()).select_from(Ticket)) or 0
+            # It still reads every matching row internally, so it gets slower as
+            # the table grows - a cost worth measuring rather than assuming.
+            statement = self._filtered(select(func.count()).select_from(Ticket), label, needs_review)
+            return self._session.scalar(statement) or 0

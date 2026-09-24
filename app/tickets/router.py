@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.core.config import settings
 from app.tickets.dependencies import get_ticket_service
 from app.tickets.repository import StorageError
 from app.tickets.schemas import CreateTicketRequest, TicketListResponse, TicketResponse
@@ -60,15 +61,37 @@ def list_tickets(
     # Query(...) declares optional URL parameters: /tickets?label=billing
     label: str | None = Query(default=None),
     needs_review: bool | None = Query(default=None),
+    # ge / le are validation rules: "greater or equal" and "less or equal".
+    # FastAPI rejects a request that breaks them with 422 before this function
+    # runs, so an oversized page is never built. The ceiling is not advice to
+    # the client - it is enforced, because the caller must not get to choose how
+    # much work the server does.
+    limit: int = Query(
+        default=settings.default_page_size,
+        ge=1,
+        le=settings.max_page_size,
+        description="How many tickets to return.",
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="How many tickets to skip before the first one returned.",
+    ),
     service: TicketService = Depends(get_ticket_service),
 ) -> TicketListResponse:
     try:
-        tickets = service.list(label=label, needs_review=needs_review)
+        page = service.list(
+            label=label, needs_review=needs_review, limit=limit, offset=offset
+        )
     except StorageError:
         logger.exception("Storage unavailable while listing tickets")
         raise HTTPException(status_code=503, detail="Storage is unavailable")
 
     return TicketListResponse(
-        total=len(tickets),
-        items=[TicketResponse.model_validate(t) for t in tickets],
+        # total comes from a COUNT query, not from len(items): the page holds at
+        # most `limit` rows, while total describes everything that matches.
+        total=page.total,
+        limit=page.limit,
+        offset=page.offset,
+        items=[TicketResponse.model_validate(t) for t in page.items],
     )

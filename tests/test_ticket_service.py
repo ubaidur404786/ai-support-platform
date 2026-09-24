@@ -85,10 +85,10 @@ def test_list_filters_are_combined():
     low.submit("unsure billing")
     other.submit("confident technical")
 
-    assert len(high.list()) == 3
-    assert len(high.list(label="billing")) == 2
-    assert len(high.list(needs_review=True)) == 1
-    assert len(high.list(label="billing", needs_review=True)) == 1
+    assert len(high.list().items) == 3
+    assert len(high.list(label="billing").items) == 2
+    assert len(high.list(needs_review=True).items) == 1
+    assert len(high.list(label="billing", needs_review=True).items) == 1
 
 
 def test_classifier_failure_propagates():
@@ -101,3 +101,59 @@ def test_classifier_failure_propagates():
     # The service does not swallow the error - the router decides it is a 500.
     with pytest.raises(RuntimeError, match="model exploded"):
         service.submit("anything")
+
+# --- Pagination, without HTTP -----------------------------------------------
+
+
+def build_paged_service(
+    default_page_size: int = 50, max_page_size: int = 200
+) -> TicketService:
+    return TicketService(
+        repository=InMemoryTicketRepository(),
+        classifier=FakeClassifier(),
+        low_confidence_threshold=0.55,
+        default_page_size=default_page_size,
+        max_page_size=max_page_size,
+    )
+
+
+def test_list_uses_the_default_page_size_when_none_is_given():
+    service = build_paged_service(default_page_size=2)
+    for i in range(5):
+        service.submit(f"ticket {i}")
+
+    page = service.list()
+
+    assert page.limit == 2
+    assert len(page.items) == 2
+    assert page.total == 5
+    assert page.offset == 0
+
+
+# The service must defend the ceiling itself, because a worker or a CLI can
+# call it with no HTTP validation in front of it.
+@pytest.mark.parametrize(
+    "requested_limit, expected_limit",
+    [(1, 1), (5, 5), (10, 10), (11, 10), (10_000, 10), (0, 1), (-5, 1)],
+)
+def test_service_clamps_the_limit(requested_limit, expected_limit):
+    service = build_paged_service(max_page_size=10)
+
+    assert service.list(limit=requested_limit).limit == expected_limit
+
+
+def test_service_clamps_a_negative_offset():
+    service = build_paged_service()
+
+    assert service.list(offset=-10).offset == 0
+
+
+def test_total_is_independent_of_the_page():
+    service = build_paged_service()
+    for i in range(6):
+        service.submit(f"ticket {i}")
+
+    page = service.list(limit=2, offset=4)
+
+    assert len(page.items) == 2
+    assert page.total == 6
