@@ -4,9 +4,11 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 from app.core.config import settings
 from app.tickets.dependencies import get_ticket_service
-from app.tickets.repository import StorageError
+from app.core.errors import StorageError
 from app.tickets.schemas import CreateTicketRequest, TicketListResponse, TicketResponse
 from app.tickets.service import TicketService
 
@@ -20,10 +22,13 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 @router.post("", response_model=TicketResponse, status_code=201)
 def create_ticket(
     payload: CreateTicketRequest,
+    # Declaring this dependency is what makes the endpoint non-public. It runs
+    # before the body, so an anonymous caller never reaches the code below.
+    current_user: User = Depends(get_current_user),
     service: TicketService = Depends(get_ticket_service),
 ) -> TicketResponse:
     try:
-        ticket = service.submit(payload.text)
+        ticket = service.submit(current_user.organization_id, payload.text)
     except StorageError:
         # 503, not 500: the request was valid and the caller can retry once the
         # database is back. A 500 would tell them the request itself was broken.
@@ -41,16 +46,19 @@ def create_ticket(
 @router.get("/{ticket_id}", response_model=TicketResponse)
 def get_ticket(
     ticket_id: int,
+    current_user: User = Depends(get_current_user),
     service: TicketService = Depends(get_ticket_service),
 ) -> TicketResponse:
     try:
-        ticket = service.get(ticket_id)
+        ticket = service.get(current_user.organization_id, ticket_id)
     except StorageError:
         logger.exception("Storage unavailable while reading a ticket")
         raise HTTPException(status_code=503, detail="Storage is unavailable")
 
     if ticket is None:
         # The service returned None; turning that into 404 is the router's job.
+        # None also covers "exists, but belongs to another organisation", and 404
+        # is the right answer there too - 403 would confirm it exists.
         raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} not found")
 
     return TicketResponse.model_validate(ticket)
@@ -77,11 +85,16 @@ def list_tickets(
         ge=0,
         description="How many tickets to skip before the first one returned.",
     ),
+    current_user: User = Depends(get_current_user),
     service: TicketService = Depends(get_ticket_service),
 ) -> TicketListResponse:
     try:
         page = service.list(
-            label=label, needs_review=needs_review, limit=limit, offset=offset
+            current_user.organization_id,
+            label=label,
+            needs_review=needs_review,
+            limit=limit,
+            offset=offset,
         )
     except StorageError:
         logger.exception("Storage unavailable while listing tickets")

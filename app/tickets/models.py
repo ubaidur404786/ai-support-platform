@@ -6,7 +6,7 @@ API schemas in schemas.py. It now also describes how a ticket is stored.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, Index, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -23,6 +23,19 @@ class Ticket(Base):
     # same moment can no longer receive the same id - exactly the problem the
     # two-server test exposed in v1.
     id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Every ticket belongs to an organisation. Not nullable: a ticket with no
+    # owner is a ticket no authorization rule can reason about, so the database
+    # refuses to create one.
+    #
+    # Indexed without waiting for a measurement, and the reason is different from
+    # the needs_review case below. There the question was "how many rows match?" -
+    # a guess about data, which measurement proved wrong. Here the question is
+    # "how many queries use this column?", and the answer is all of them: from v4
+    # onward every ticket query filters by organisation.
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
 
     # Text has no length limit; String(n) does. Ticket bodies vary, labels do not.
     text: Mapped[str] = mapped_column(Text)

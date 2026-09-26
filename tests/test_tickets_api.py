@@ -8,7 +8,7 @@ from app.classification.dependencies import get_classifier
 from app.core.config import settings
 from app.main import create_app
 from app.tickets.dependencies import get_repository
-from app.tickets.repository import StorageError
+from app.core.errors import StorageError
 
 
 def test_create_ticket_classifies_and_stores(tickets_client):
@@ -129,17 +129,29 @@ def test_create_returns_503_when_model_missing(tickets_client):
 
 
 def test_endpoints_return_503_when_storage_fails(tickets_client):
+    # These signatures must track TicketRepository exactly. In v3 this double was
+    # missed when the Protocol gained limit/offset, and only the test run caught
+    # it - a Protocol has no runtime enforcement, so N implementations means N
+    # manual edits with no compiler help. Still the strongest argument for adding
+    # a type checker.
     class BrokenRepository:
         def add(self, ticket):
             raise StorageError("connection refused")
 
-        def get(self, ticket_id):
+        def get(self, organization_id, ticket_id):
             raise StorageError("connection refused")
 
-        def list(self, label=None, needs_review=None, limit=50, offset=0):
+        def list(
+            self,
+            organization_id,
+            label=None,
+            needs_review=None,
+            limit=50,
+            offset=0,
+        ):
             raise StorageError("connection refused")
 
-        def count(self, label=None, needs_review=None):
+        def count(self, organization_id, label=None, needs_review=None):
             raise StorageError("connection refused")
 
     tickets_client.app.dependency_overrides[get_repository] = BrokenRepository
@@ -156,6 +168,11 @@ def test_tickets_survive_a_restart(tickets_client):
 
     # A new app instance is the closest thing to restarting the server.
     with TestClient(create_app()) as restarted:
+        # A fresh client carries no credentials. Reusing the same caller's token
+        # keeps this test about durability rather than authentication.
+        restarted.headers.update(
+            {"Authorization": tickets_client.headers["Authorization"]}
+        )
         body = restarted.get("/tickets").json()
 
     assert body["total"] == 1
@@ -166,6 +183,9 @@ def test_two_app_instances_share_one_database(tickets_client):
     created = tickets_client.post("/tickets", json={"text": "I cannot log in"}).json()
 
     with TestClient(create_app()) as other_instance:
+        other_instance.headers.update(
+            {"Authorization": tickets_client.headers["Authorization"]}
+        )
         fetched = other_instance.get(f"/tickets/{created['id']}").json()
 
     assert fetched == created
@@ -287,3 +307,82 @@ def test_pagination_combines_with_filters(tickets_client):
     # many pages to request.
     assert body["total"] == 4
     assert all(t["label"] == "billing" for t in body["items"])
+
+
+# --- Authentication and tenant isolation (v4) --------------------------------
+
+
+@pytest.mark.parametrize("method, path", [
+    ("post", "/tickets"),
+    ("get", "/tickets"),
+    ("get", "/tickets/1"),
+])
+def test_tickets_endpoints_require_a_token(anonymous_client, method, path):
+    """No endpoint on /tickets may answer an anonymous caller.
+
+    Parametrised over every route rather than written once, because the risk is
+    not "auth is broken" - it is "one endpoint was added without it".
+    """
+    # .request(method, ...) rather than .get(...)/.post(...): httpx's get() does
+    # not accept a json body, and this test covers both verbs from one table.
+    response = anonymous_client.request(
+        method.upper(), path, json={"text": "no token here"}
+    )
+
+    assert response.status_code == 401
+    # The standard requires a 401 to say how to authenticate.
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.mark.parametrize("header", [
+    "Bearer not-a-token",
+    "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.wrong-signature",
+    "Basic dXNlcjpwYXNz",
+    "not-even-a-scheme",
+])
+def test_a_bad_token_is_refused(anonymous_client, header):
+    response = anonymous_client.get("/tickets", headers={"Authorization": header})
+
+    assert response.status_code == 401
+
+
+def test_a_ticket_is_invisible_to_another_organisation(
+    tickets_client, second_org_client
+):
+    """The reason every repository method takes organization_id.
+
+    Both clients hit the same database. Acme writes; Globex must not be able to
+    read it, by id or by listing.
+    """
+    created = tickets_client.post("/tickets", json={"text": "I was charged twice"})
+    assert created.status_code == 201
+    ticket_id = created.json()["id"]
+
+    # 404, not 403. A 403 would confirm the ticket exists, and across a tenant
+    # boundary existence is itself information: an attacker could walk the ids
+    # and measure a competitor's ticket volume.
+    assert second_org_client.get(f"/tickets/{ticket_id}").status_code == 404
+
+    listed = second_org_client.get("/tickets").json()
+    assert listed["total"] == 0
+    assert listed["items"] == []
+
+    # And the owner can still read it - proving the filter is scoped, not broken.
+    assert tickets_client.get(f"/tickets/{ticket_id}").status_code == 200
+
+
+def test_the_caller_cannot_choose_its_own_organisation(tickets_client):
+    """organization_id in the request body must be ignored, not honoured.
+
+    Pydantic ignores unknown fields by default, so an unexpected organization_id
+    is dropped rather than rejected. That is convenient, and it is exactly why
+    this test exists: silence is not proof that the field was ignored. The ticket
+    must still be filed under the token's organisation.
+    """
+    created = tickets_client.post(
+        "/tickets", json={"text": "I was charged twice", "organization_id": 9999}
+    )
+
+    assert created.status_code == 201
+    # Readable by the real caller, which it would not be if 9999 had been used.
+    assert tickets_client.get(f"/tickets/{created.json()['id']}").status_code == 200

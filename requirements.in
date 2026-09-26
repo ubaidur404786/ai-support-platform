@@ -18,3 +18,9 @@ httpx>=0.27               # HTTP client required by FastAPI's TestClient
 sqlalchemy>=2.0           # Maps Python objects to database rows and builds the SQL
 psycopg[binary]>=3.2      # PostgreSQL driver ([binary] ships a compiled wheel, no build tools needed)
 alembic>=1.13   
+
+
+# --- Authentication --------------------------------------------------------
+bcrypt>=4.2               # Password hashing: deliberately slow, salted per password
+pyjwt>=2.9                # Signs and verifies the access token (JSON Web Token)
+email-validator>=2.2      # Backs pydantic's EmailStr type; checks address format

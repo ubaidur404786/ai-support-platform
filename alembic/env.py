@@ -18,6 +18,11 @@ from app.core.database import Base
 # import, autogenerate would see an empty schema and produce an empty migration.
 from app.tickets import models  # noqa: F401
 
+# Both modules are named models. Without "as auth_models" the second import
+# would rebind the name and the first would be discarded. The import exists only
+# for its side effect - registering tables on Base.metadata.
+from app.auth import models as auth_models  # noqa: F401
+
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.

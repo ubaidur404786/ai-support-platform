@@ -33,13 +33,22 @@ class InMemoryTicketRepository:
             self._tickets[ticket.id] = ticket
         return ticket
 
-    def get(self, ticket_id: int) -> Ticket | None:
-        return self._tickets.get(ticket_id)
+    def get(self, organization_id: int, ticket_id: int) -> Ticket | None:
+        ticket = self._tickets.get(ticket_id)
+        # Returning None rather than the ticket is what the real repository does
+        # for another organisation's row. A fake that skipped this check would
+        # let an isolation bug pass every service-level test.
+        if ticket is None or ticket.organization_id != organization_id:
+            return None
+        return ticket
 
     def _filtered(
-        self, label: str | None, needs_review: bool | None
+        self, organization_id: int, label: str | None, needs_review: bool | None
     ) -> list[Ticket]:
-        tickets = list(self._tickets.values())
+        # Applied unconditionally, exactly as in PostgresTicketRepository.
+        tickets = [
+            t for t in self._tickets.values() if t.organization_id == organization_id
+        ]
         if label is not None:
             tickets = [t for t in tickets if t.label == label]
         if needs_review is not None:
@@ -48,6 +57,7 @@ class InMemoryTicketRepository:
 
     def list(
         self,
+        organization_id: int,
         label: str | None = None,
         needs_review: bool | None = None,
         limit: int = 50,
@@ -56,9 +66,14 @@ class InMemoryTicketRepository:
         # A Python slice stands in for SQL's LIMIT/OFFSET. Note what this fake
         # does NOT reproduce: the real database discards `offset` rows before
         # returning any, and that work grows with depth. A fake can hide a cost.
-        return self._filtered(label, needs_review)[offset : offset + limit]
+        return self._filtered(organization_id, label, needs_review)[
+            offset : offset + limit
+        ]
 
     def count(
-        self, label: str | None = None, needs_review: bool | None = None
+        self,
+        organization_id: int,
+        label: str | None = None,
+        needs_review: bool | None = None,
     ) -> int:
-        return len(self._filtered(label, needs_review))
+        return len(self._filtered(organization_id, label, needs_review))

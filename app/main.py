@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.auth.router import router as auth_router
 from app.classification.classifier import TicketClassifier
 from app.classification.router import router as classification_router
 from app.core.config import Settings, settings
@@ -40,6 +41,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(health_router)
+    app.include_router(auth_router)
     app.include_router(classification_router)
     app.include_router(tickets_router)
     return app

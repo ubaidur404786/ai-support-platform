@@ -3,9 +3,15 @@
 import pytest
 
 from app.classification.classifier import Prediction
-# from app.tickets.repository import InMemoryTicketRepository
 from app.tickets.service import TicketService
 from tests.fakes import InMemoryTicketRepository
+
+# Every service call now names the organisation it acts for. These tests do not
+# go through HTTP, so there is no token to read it from - the id is supplied
+# directly, which is exactly how a background worker would call the service.
+ORG = 1
+OTHER_ORG = 2
+
 
 class FakeClassifier:
     """Returns a fixed prediction, so tests control confidence exactly.
@@ -36,7 +42,7 @@ def build_service(confidence: float = 0.9, threshold: float = 0.55) -> TicketSer
 def test_submit_stores_the_classification_result():
     service = build_service(confidence=0.9)
 
-    ticket = service.submit("I was charged twice")
+    ticket = service.submit(ORG, "I was charged twice")
 
     assert ticket.id == 1
     assert ticket.text == "I was charged twice"
@@ -53,7 +59,7 @@ def test_submit_stores_the_classification_result():
 def test_review_flag_follows_the_threshold(confidence, expected_review):
     service = build_service(confidence=confidence, threshold=0.55)
 
-    assert service.submit("some text").needs_review is expected_review
+    assert service.submit(ORG, "some text").needs_review is expected_review
 
 
 def test_submit_passes_the_text_to_the_classifier():
@@ -64,7 +70,7 @@ def test_submit_passes_the_text_to_the_classifier():
         low_confidence_threshold=0.55,
     )
 
-    service.submit("The app crashes on upload")
+    service.submit(ORG, "The app crashes on upload")
 
     assert classifier.calls == ["The app crashes on upload"]
 
@@ -72,7 +78,7 @@ def test_submit_passes_the_text_to_the_classifier():
 def test_get_returns_none_for_unknown_id():
     # The service does not raise and does not know about HTTP status codes;
     # turning None into a 404 is the router's job.
-    assert build_service().get(999) is None
+    assert build_service().get(ORG, 999) is None
 
 
 def test_list_filters_are_combined():
@@ -81,14 +87,14 @@ def test_list_filters_are_combined():
     low = TicketService(repository, FakeClassifier("billing", 0.2), 0.55)
     other = TicketService(repository, FakeClassifier("technical_issue", 0.9), 0.55)
 
-    high.submit("confident billing")
-    low.submit("unsure billing")
-    other.submit("confident technical")
+    high.submit(ORG, "confident billing")
+    low.submit(ORG, "unsure billing")
+    other.submit(ORG, "confident technical")
 
-    assert len(high.list().items) == 3
-    assert len(high.list(label="billing").items) == 2
-    assert len(high.list(needs_review=True).items) == 1
-    assert len(high.list(label="billing", needs_review=True).items) == 1
+    assert len(high.list(ORG).items) == 3
+    assert len(high.list(ORG, label="billing").items) == 2
+    assert len(high.list(ORG, needs_review=True).items) == 1
+    assert len(high.list(ORG, label="billing", needs_review=True).items) == 1
 
 
 def test_classifier_failure_propagates():
@@ -100,7 +106,7 @@ def test_classifier_failure_propagates():
 
     # The service does not swallow the error - the router decides it is a 500.
     with pytest.raises(RuntimeError, match="model exploded"):
-        service.submit("anything")
+        service.submit(ORG, "anything")
 
 # --- Pagination, without HTTP -----------------------------------------------
 
@@ -120,9 +126,9 @@ def build_paged_service(
 def test_list_uses_the_default_page_size_when_none_is_given():
     service = build_paged_service(default_page_size=2)
     for i in range(5):
-        service.submit(f"ticket {i}")
+        service.submit(ORG, f"ticket {i}")
 
-    page = service.list()
+    page = service.list(ORG)
 
     assert page.limit == 2
     assert len(page.items) == 2
@@ -139,21 +145,44 @@ def test_list_uses_the_default_page_size_when_none_is_given():
 def test_service_clamps_the_limit(requested_limit, expected_limit):
     service = build_paged_service(max_page_size=10)
 
-    assert service.list(limit=requested_limit).limit == expected_limit
+    assert service.list(ORG, limit=requested_limit).limit == expected_limit
 
 
 def test_service_clamps_a_negative_offset():
     service = build_paged_service()
 
-    assert service.list(offset=-10).offset == 0
+    assert service.list(ORG, offset=-10).offset == 0
 
 
 def test_total_is_independent_of_the_page():
     service = build_paged_service()
     for i in range(6):
-        service.submit(f"ticket {i}")
+        service.submit(ORG, f"ticket {i}")
 
-    page = service.list(limit=2, offset=4)
+    page = service.list(ORG, limit=2, offset=4)
 
     assert len(page.items) == 2
     assert page.total == 6
+
+
+def test_one_organisation_cannot_see_another_organisations_tickets():
+    """The whole reason organization_id threads through every method.
+
+    Proved at the service layer as well as through HTTP, because this is where
+    the filter is actually passed on. An HTTP-only test would still pass if the
+    service ignored its argument and the router happened to be right.
+    """
+    repository = InMemoryTicketRepository()
+    service = TicketService(repository, FakeClassifier(), 0.55)
+
+    mine = service.submit(ORG, "my ticket")
+    service.submit(OTHER_ORG, "their ticket")
+
+    assert service.list(ORG).total == 1
+    assert service.list(OTHER_ORG).total == 1
+
+    # Reading another organisation's ticket by id returns None, not the ticket.
+    # The router turns that into 404 rather than 403: confirming the row exists
+    # would itself leak information across the boundary.
+    assert service.get(OTHER_ORG, mine.id) is None
+    assert service.get(ORG, mine.id) is not None

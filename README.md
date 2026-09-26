@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v3 — Pagination** (branch `v3-pagination`)
+**Current version: v4 — Authentication and tenant isolation** (branch `v4-authentication`)
 
 ## 1. Project Overview
 
@@ -14,7 +14,8 @@ controlled actions such as creating or updating tickets.
 
 The engineering goal is a production-style AI system whose every component can be justified:
 what problem forced it in, what it costs, and what happens when it fails. The architecture
-history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`, `v3-pagination`, ...)
+history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
+`v3-pagination`, `v4-authentication`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -33,24 +34,27 @@ a human steps in where the model is unsure rather than everywhere.
 | Low-confidence predictions flagged for human review | Available | v1 |
 | Durable, queryable ticket history shared across processes | Available | v2 |
 | Paged, bounded ticket listing with filters | Available | v3 |
+| Per-organisation isolation of every ticket, enforced in SQL | Available | v4 |
 | Knowledge base search and retrieval-augmented answers | Planned | — |
 | Controlled actions (create / update tickets) with human approval | Planned | — |
 | Model evaluation, monitoring, and safe rollout | Planned | — |
 
 ## 4. Current Architecture
 
-![v3 architecture](docs/architecture/v3.svg)
+![v4 architecture](docs/architecture/v4.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
-classifier loaded at startup, and PostgreSQL as the system of record. No cache, queue, or
+classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
+a bearer token, and every ticket belongs to exactly one organisation. No cache, queue, or
 external service yet.
 
 ```
 app/
 ├── main.py          create_app(): lifespan, wiring, router registration
-├── core/            settings, logging, database engine and session
+├── core/            settings, logging, database engine/session, shared errors
 ├── health/          GET /health  (model + database status)
-├── classification/  the model + POST /classify
+├── auth/            POST /auth/register, POST /auth/login, get_current_user
+├── classification/  the model + POST /classify   (still public — see §15)
 └── tickets/         POST/GET /tickets  (router → service → repository → PostgreSQL)
 ```
 
@@ -58,20 +62,28 @@ app/
 
 `POST /tickets`:
 
-1. Pydantic validates the body: required, 3–5000 characters, not blank. Invalid → 422.
-2. FastAPI resolves dependencies: database session → repository → `TicketService`, plus the
+1. `get_current_user` reads the `Authorization: Bearer` header, verifies the token's signature
+   and expiry, loads the `users` row, and checks `is_active`. No header → **401**; anything wrong
+   with the token → **401** with the same message. Being a dependency, this runs *before* the
+   handler body, so an anonymous caller never reaches endpoint code.
+2. Pydantic validates the body: required, 3–5000 characters, not blank. Invalid → 422.
+3. FastAPI resolves dependencies: database session → repository → `TicketService`, plus the
    classifier. If the model is not loaded, `get_classifier` raises 503 before any logic runs.
-3. `TicketService.submit` classifies the text, compares the confidence against
+4. `TicketService.submit` receives `current_user.organization_id` — from the token, never from
+   the request body — classifies the text, compares the confidence against
    `LOW_CONFIDENCE_THRESHOLD`, builds a `Ticket`, and hands it to the repository.
-4. The repository inserts the row and commits. PostgreSQL assigns the id from a sequence.
-5. Response: 201 with `{id, text, label, confidence, model_version, needs_review, created_at}`.
+5. The repository inserts the row and commits. PostgreSQL assigns the id from a sequence.
+6. Response: 201 with `{id, text, label, confidence, model_version, needs_review, created_at}`.
 
 Failure paths: a database error is rolled back and re-raised as `StorageError`, which the
 router turns into **503** — the request was valid and can be retried. Any other unexpected
 exception → 500 with a generic message and a logged traceback.
 
-`GET /tickets/{id}` returns 200 or 404. `GET /tickets` accepts `label` and `needs_review`
-filters plus `limit` and `offset`, all of which become SQL. An oversized `limit` is rejected
+`GET /tickets/{id}` returns 200 or 404 — including for a ticket that exists in *another*
+organisation, because across a tenant boundary existence is itself information
+([ADR-015](docs/adr/ADR-015-cross-tenant-404.md)). `GET /tickets` accepts `label` and
+`needs_review` filters plus `limit` and `offset`, all of which become SQL, always alongside a
+`WHERE organization_id = …` that is not optional. An oversized `limit` is rejected
 with 422 before the handler runs, and the service clamps it again for callers that do not
 arrive over HTTP ([ADR-011](docs/adr/ADR-011-bounded-work-per-request.md)). `POST /classify`
 classifies without storing.
@@ -107,7 +119,14 @@ each prediction means a later model change can be evaluated against what the old
 
 Tickets are written to the `tickets` table in PostgreSQL and survive process restarts. Any
 number of API processes share the same rows. Ids come from `tickets_id_seq`, so concurrent
-writers cannot collide. `POST /classify` stores nothing. The schema is versioned by Alembic;
+writers cannot collide. `POST /classify` stores nothing.
+
+Every ticket carries a `NOT NULL organization_id` referencing `organizations`, and every read is
+filtered by it. `users` belong to one organisation and store only a bcrypt hash, never a
+password. The 13,000 tickets written before v4 were backfilled into a synthetic `default`
+organisation by the migration — intact, but owned by a tenant nobody logs into.
+
+The schema is versioned by Alembic;
 the model file and its metrics are produced at training time.
 
 ## 8. Technology Stack
@@ -121,6 +140,7 @@ the model file and its metrics are produced at training time.
 | Storage | PostgreSQL 17, SQLAlchemy 2.0 (sync), psycopg 3 | Durable, shared, queryable; see [ADR-007](docs/adr/ADR-007-postgresql-system-of-record.md) and [ADR-008](docs/adr/ADR-008-sqlalchemy-orm-sync-sessions.md) |
 | Schema | Alembic | Versioned migrations; also builds the test database |
 | Paging | Offset pagination (`LIMIT`/`OFFSET`) | Bounded responses; see [ADR-010](docs/adr/ADR-010-offset-pagination.md) |
+| Authentication | `bcrypt`, `PyJWT`, `email-validator` | Signed bearer tokens and slow salted hashing; see [ADR-012](docs/adr/ADR-012-bearer-tokens.md) and [ADR-014](docs/adr/ADR-014-bcrypt-password-storage.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
 
@@ -129,9 +149,11 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v3 — Pagination.** See [docs/versions/v3-pagination.md](docs/versions/v3-pagination.md) for
-the full problem / solution / trade-off / measurement write-up, and
-[docs/versions/v3-pagination/README.md](docs/versions/v3-pagination/README.md) for a short guide.
+**v4 — Authentication and tenant isolation.** See
+[docs/versions/v4-authentication.md](docs/versions/v4-authentication.md) for the full problem /
+solution / trade-off / measurement write-up, and
+[docs/versions/v4-authentication/README.md](docs/versions/v4-authentication/README.md) for a
+short guide.
 
 ## 10. Version Evolution
 
@@ -141,9 +163,21 @@ the full problem / solution / trade-off / measurement write-up, and
 | v1 | `v1-modular-monolith` | Tickets must be stored and uncertainty made visible; the flat layout has nowhere to put business logic | Complete |
 | v2 | `v2-postgresql` | State lives inside the process: data is lost on restart, cannot be shared between replicas, and blocks running more workers | Complete |
 | v3 | `v3-pagination` | `GET /tickets` had no paging: 13,000 rows took 2.18 s and returned everything, letting the caller choose the server's workload | Complete |
-| v4 | — | `total` costs 60x the page query it accompanies (22.3 ms vs 0.36 ms) | Next |
+| v4 | `v4-authentication` | Every request was anonymous: no row recorded who created it, and any client that could reach the port could read and write every ticket | Complete |
+| v5 | — | `POST /classify` is public and consumes CPU per call; `/auth/login` is a 682 ms unauthenticated request. Both need per-caller limits | Next |
 
-Old branches remain on GitHub as engineering history.
+Only v3 diverged from the original roadmap, which had scheduled authentication there.
+Measurement inserted pagination first, because the unbounded list had a measured trigger and
+authentication did not. Old branches remain on GitHub as engineering history.
+
+The whole chain in one picture — the problem that forced each version, what changed, and what was
+measured afterwards:
+
+![Architecture evolution, v0 to v4](docs/architecture/evolution.svg)
+
+Carried forward, measured but not yet fixed: `total` still costs more than the page it
+accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
+`POST /classify` is unauthenticated.
 
 ## 11. How to Run
 
@@ -169,9 +203,11 @@ uvicorn app.main:app
 Interactive API docs: http://127.0.0.1:8000/docs
 
 ```bash
-curl -X POST http://127.0.0.1:8000/tickets -H "Content-Type: application/json" -d '{"text": "I was charged twice for my subscription"}'
-curl "http://127.0.0.1:8000/tickets?needs_review=true&limit=20"
-curl "http://127.0.0.1:8000/tickets?limit=50&offset=50"
+curl -X POST http://127.0.0.1:8000/auth/register -H "Content-Type: application/json" -d '{"organization_name": "Acme", "email": "maya@acme.com", "password": "correct-horse-battery"}'
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/login -H "Content-Type: application/json" -d '{"email": "maya@acme.com", "password": "correct-horse-battery"}' | python -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+curl -X POST http://127.0.0.1:8000/tickets -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"text": "I was charged twice for my subscription"}'
+curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/tickets?needs_review=true&limit=20"
+curl -i http://127.0.0.1:8000/tickets     # 401: no token
 ```
 
 Configuration (environment variables or `.env`, see `.env.example`):
@@ -186,6 +222,9 @@ Configuration (environment variables or `.env`, see `.env.example`):
 | `DATABASE_URL` | `postgresql+psycopg://support:support@localhost:5432/support_platform` | Database connection |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | `5` / `10` | Connections per process — workers × (pool + overflow) must stay under PostgreSQL's limit |
 | `DB_ECHO` | `false` | Print every SQL statement |
+| `JWT_SECRET_KEY` | **none — required** | Token signing key. The app refuses to start without it; generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `JWT_ALGORITHM` | `HS256` | Signing algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Token lifetime |
 | `LOG_LEVEL` | `INFO` | Python logging level |
 
 The Compose credentials are local development values only. Real deployments take them from the
@@ -203,8 +242,16 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-70 tests:
+99 tests, about 103 seconds — roughly 60% of that is bcrypt doing its job (see §15):
 
+- **Authentication tests** — register, login, duplicate email (409), wrong password and unknown
+  email (401, asserted to be *identical*), six invalid-input variants (422), and a test that the
+  raw response text of register and login contains neither `"password"` nor `"$2b$"`.
+- **Tenant isolation** — one organisation writes a ticket; another gets 404 by id and `total: 0`
+  from the list, while the owner can still read it. Proved at the service layer too, so an HTTP
+  test cannot pass while the service ignores its argument.
+- **Every `/tickets` route parametrised against an anonymous client**, because the risk is not
+  "auth is broken", it is "one endpoint was added without it".
 - **API tests** against a real PostgreSQL database — create / read / list / filter / paginate,
   with tables truncated before each test so ids are predictable. The clearest one walks every
   page and asserts the ids come back with no duplicates and no gaps.
@@ -248,6 +295,10 @@ results are flagged rather than trusted.
 - [ADR-009 — Versioned migrations from the first table](docs/adr/ADR-009-alembic-migrations.md)
 - [ADR-010 — Offset pagination for list endpoints](docs/adr/ADR-010-offset-pagination.md)
 - [ADR-011 — Every request must do a bounded amount of work](docs/adr/ADR-011-bounded-work-per-request.md)
+- [ADR-012 — Signed bearer tokens carrying only the user id](docs/adr/ADR-012-bearer-tokens.md)
+- [ADR-013 — The organisation is the tenancy boundary, and its filter is a required argument](docs/adr/ADR-013-organisation-scoped-authorization.md)
+- [ADR-014 — bcrypt, used directly, for password storage](docs/adr/ADR-014-bcrypt-password-storage.md)
+- [ADR-015 — A read across a tenant boundary answers 404, not 403](docs/adr/ADR-015-cross-tenant-404.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -261,6 +312,56 @@ session**:
 | v2 | `/tickets` (PostgreSQL) | 1 | 27.6 req/s | 33.9 ms | 51.2 ms | 93.3 ms |
 | v2 | `/classify` (no database) | 1 | 50.0 req/s | 16.1 ms | 42.4 ms | 66.5 ms |
 | v2 | `/tickets` | 10 | 44.5 req/s | 190.7 ms | 420.8 ms | 717.0 ms |
+
+Authentication, measured in its own session (`DB_ECHO=false`, no `--reload`, Python `httpx`
+client):
+
+| Version | Request | n | P50 | Notes |
+|---|---|---|---|---|
+| v4 | `POST /auth/login` | 10 | **682 ms** | min 655, max 770 |
+| v4 | `GET /tickets` (authenticated) | 20 | 33.8 ms | min 29.4, max 41.2 |
+
+`bcrypt.checkpw` measured alone at cost factor 12 takes **682.2 ms** — the same number as the
+whole login endpoint. The email lookup and the token signing disappear into rounding: **the
+endpoint is the hash.** Inside a `GET /tickets` request the database accounts for 0.429 ms of
+33.8 ms (1.3%): 0.183 ms for the `users` lookup that `get_current_user` adds, and 0.246 ms for
+the page itself. The rest is Python, ASGI, Pydantic serialisation and loopback — **the database
+is not the bottleneck in this system and never has been.**
+
+The v4 numbers are deliberately *not* compared against v3's, because `DB_ECHO` and `--reload`
+both changed between the two sessions. An earlier attempt to time login with PowerShell's
+`Invoke-RestMethod` reported 2174 ms for a 682 ms request; the client was adding ~1500 ms of its
+own. **An instrument has to be cheaper than the thing it measures.**
+
+Query plans, each statement run twice with the second reported, since the first paid for cold
+buffers (2.529 ms, and a 2.043 ms planning time):
+
+| Query | Plan | Execution |
+|---|---|---|
+| `ORDER BY id LIMIT 50` | `Index Scan using tickets_pkey` | 0.145 ms |
+| `WHERE organization_id = 1 ORDER BY id LIMIT 50` | `Index Scan using tickets_pkey` + row filter | **0.128 ms** |
+| `count(*) WHERE organization_id = 1` | `Index Only Scan using ix_tickets_organization_id`, `Heap Fetches: 0` | 5.78 ms |
+
+**The tenant filter is free.** The difference is jitter — the filtered query is marginally
+*lower*, which is how you know it is noise. Reading the cold first run instead would have
+"proved" that adding a `WHERE` clause made the query 10x faster.
+
+**The planner declined the new index for the page query**, using `tickets_pkey` with a row filter
+instead. Correct: every row is currently in organisation 1, so the index selects 100% of the
+table and helps nothing, while `tickets_pkey` supplies the `ORDER BY id` ordering for free. An
+index is a possibility the planner may decline, not an instruction.
+
+**An unplanned side effect:** the same index turned `count(*)` into an index-only scan that never
+touches the table. v3 recorded this COUNT at 22.3 ms and made it the headline next problem; it is
+now 5.78 ms. No speedup is claimed — that was a different session — but the plan is structurally
+better, for a reason explainable after the fact and not predicted before it. An index added for
+authorization incidentally improved the counter.
+
+**bcrypt's cost is visible in the test suite**, which went from ~7 s (70 tests) to 102.92 s
+(99 tests). Not overhead — arithmetic: each `tickets_client` fixture registers (one hash) and
+logs in (one verify), ~1.36 s, across roughly 45 tests. `45 × 1.36 ≈ 61 s`, about 60% of the
+runtime. A hash fast enough to be free in tests is a hash fast enough to brute-force in
+production.
 
 Listing, with 13,000 rows in the table (client-measured, includes client JSON parsing):
 
@@ -286,24 +387,47 @@ distinct ids. Ids come from a database sequence, so no process can collide with 
 days later on the same laptop. Benchmarks here are only compared when taken in the same session
 on the same machine; cross-day comparisons are reported as invalid rather than as regressions.
 
-**Known limitations, all measured:**
+**Known limitations:**
 
-1. *`total` costs more than the data it accompanies.* The `COUNT` query runs on every list
-   request and executes in 22.3 ms against 0.36 ms for the page — roughly 60 to 1. PostgreSQL
-   cannot store a row count, because under MVCC the number of visible rows depends on the asking
-   transaction. This is the next thing to address.
-2. *Deep pages do work they discard.* `OFFSET 12900` made PostgreSQL walk 12,950 index entries
-   to return 50 rows — 17x the first page, growing linearly. Only 6 ms at this size and
-   invisible through HTTP, which is why keyset pagination has not replaced offset yet.
-3. *Multi-worker scaling is unverified on this machine.* Four workers gave no gain over one
+1. *`POST /classify` is public and consumes CPU per call.* It stores nothing and owns no data, so
+   there is no tenant boundary to cross — but inference is 1.68 ms of CPU against a throughput
+   ceiling near 80 req/s, so an anonymous caller can consume all of it. This is the same
+   *category* of problem v3 fixed for `GET /tickets`, with compute instead of rows. Trigger: the
+   moment this runs anywhere other than localhost.
+2. *`/auth/login` is a 682 ms unauthenticated request.* Correct for password security, and a
+   denial-of-service surface created by v4: one anonymous request buys 682 ms of CPU. Needs
+   per-caller rate limiting, which [ADR-011](docs/adr/ADR-011-bounded-work-per-request.md)
+   already noted pagination does not provide.
+3. *No token revocation.* A signed token cannot be un-signed. Disabling a user works immediately,
+   because the user row is loaded per request, but a token stolen from an active account works
+   until it expires — up to 60 minutes.
+4. *`total` still costs more than the data it accompanies*: 5.78 ms against 0.128 ms for the page.
+   PostgreSQL cannot store a row count, because under MVCC the number of visible rows depends on
+   the asking transaction. Improved by accident in v4, not solved.
+5. *Deep pages do work they discard.* `OFFSET 12900` made PostgreSQL walk 12,950 index entries to
+   return 50 rows — 17x the first page, growing linearly. Only 6 ms at this size and invisible
+   through HTTP, which is why keyset pagination has not replaced offset yet.
+6. *Still no type checker.* A `Protocol` has no runtime enforcement, and the inline
+   `BrokenRepository` double broke in **both** v3 and v4 for the same structural reason: N
+   implementations means N manual edits with no compiler help. mypy or Pyright would have caught
+   all of them.
+7. *The test suite takes 103 seconds*, which is approaching the point where it stops being run
+   often enough to be useful. Both standard fixes cost something real: a lower bcrypt cost factor
+   in tests means no longer testing the production configuration, and session-scoping the
+   registration means tests share a user.
+8. *Multi-worker scaling is unverified on this machine.* Four workers gave no gain over one
    (44.8 vs 44.5 req/s), and PostgreSQL showed only one worker's pool in use during the run —
-   consistent with Windows lacking `SO_REUSEPORT`, but not proven. No horizontal-scaling claim
-   is made from these numbers.
-4. *Serial inference per process.* Carried over from v0. The database's I/O wait masks it
+   consistent with Windows lacking `SO_REUSEPORT`, but not proven. No horizontal-scaling claim is
+   made from these numbers.
+9. *Serial inference per process.* Carried over from v0. The database's I/O wait masks it
    slightly; a heavier model would expose it immediately.
-5. *An open index question.* `needs_review` is not indexed, on the assumption that roughly half
-   the rows would match. In the generated data only 4% do, which is selective enough that a
-   partial index would likely help. The right answer depends on the real flag rate.
+10. *An open index question.* `needs_review` is not indexed, on the assumption that roughly half
+    the rows would match. In the generated data only 4% do, which is selective enough that a
+    partial index would likely help. The comment in `app/tickets/models.py` still states the
+    wrong assumption.
+11. *No per-user visibility and no audit trail.* Every member of an organisation sees everything
+    it owns, and `needs_review` records that something needs looking at but not who looked.
+12. *No password reset, logout, refresh or rotation.* All real, all deferred.
 
 Theoretical scaling beyond this machine is discussed per version in `docs/versions/`; none of
 it has been measured.

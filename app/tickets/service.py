@@ -42,7 +42,7 @@ class TicketService:
         self._default_page_size = default_page_size
         self._max_page_size = max_page_size
 
-    def submit(self, text: str) -> Ticket:
+    def submit(self, organization_id: int, text: str) -> Ticket:
         prediction = self._classifier.predict(text)
 
         # A low-confidence prediction is not an error: we still store the ticket,
@@ -59,6 +59,13 @@ class TicketService:
         ticket = Ticket(
             # No id here on purpose: PostgreSQL assigns it from a sequence.
             # Setting it explicitly would bypass the sequence and collide.
+            #
+            # organization_id comes from the authenticated caller, never from the
+            # request body. CreateTicketRequest deliberately has no such field: a
+            # client able to send its own organization_id could write into any
+            # other organisation's account, and the whole boundary would be
+            # decoration.
+            organization_id=organization_id,
             text=text,
             label=prediction.label,
             confidence=prediction.confidence,
@@ -67,11 +74,12 @@ class TicketService:
         )
         return self._repository.add(ticket)
 
-    def get(self, ticket_id: int) -> Ticket | None:
-        return self._repository.get(ticket_id)
+    def get(self, organization_id: int, ticket_id: int) -> Ticket | None:
+        return self._repository.get(organization_id, ticket_id)
 
     def list(
         self,
+        organization_id: int,
         label: str | None = None,
         needs_review: bool | None = None,
         limit: int | None = None,
@@ -87,10 +95,18 @@ class TicketService:
         offset = max(0, offset)
 
         items = self._repository.list(
-            label=label, needs_review=needs_review, limit=limit, offset=offset
+            organization_id,
+            label=label,
+            needs_review=needs_review,
+            limit=limit,
+            offset=offset,
         )
         # A second query, because "how many are there" cannot be answered by a
-        # page: len(items) is at most `limit`. The filters must match exactly.
-        total = self._repository.count(label=label, needs_review=needs_review)
+        # page: len(items) is at most `limit`. The filters must match exactly -
+        # including the organisation, or the total would count rows the page
+        # could never contain.
+        total = self._repository.count(
+            organization_id, label=label, needs_review=needs_review
+        )
 
         return TicketPage(items=items, total=total, limit=limit, offset=offset)

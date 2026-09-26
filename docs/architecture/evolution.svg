@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1024" viewBox="0 0 1180 1024" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <rect width="1180" height="1024" fill="#ffffff"/>
+
+  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v4</text>
+  <text x="30" y="58" fill="#555">Each version exists because the previous one produced a measured limitation. Red = the problem. Blue = the change. Grey = what was measured.</text>
+
+  <!-- ============ SECTION A: how the request path changed ============ -->
+  <text x="30" y="92" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">HOW THE REQUEST PATH CHANGED</text>
+
+  <!-- v0 -->
+  <rect x="30" y="104" width="266" height="214" rx="6" fill="#fafbfc" stroke="#ccc"/>
+  <text x="42" y="126" font-weight="bold" font-size="13" fill="#222">v0 — baseline</text>
+  <rect x="46" y="136" width="234" height="26" rx="4" fill="#f4f6f8" stroke="#666"/>
+  <text x="163" y="153" text-anchor="middle" font-size="11" fill="#222">Client — POST /classify {"text": …}</text>
+  <line x1="163" y1="162" x2="163" y2="178" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="46" y="180" width="234" height="40" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="163" y="196" text-anchor="middle" font-size="11" font-weight="bold" fill="#222">main.py</text>
+  <text x="163" y="211" text-anchor="middle" font-size="10" fill="#555">one file: routing + model + schemas</text>
+  <line x1="163" y1="220" x2="163" y2="236" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="46" y="238" width="234" height="40" rx="4" fill="#fff8e1" stroke="#333"/>
+  <text x="163" y="254" text-anchor="middle" font-size="11" font-weight="bold" fill="#222">TF-IDF + LogisticRegression</text>
+  <text x="163" y="269" text-anchor="middle" font-size="10" fill="#555">loaded once into memory, joblib</text>
+  <text x="46" y="298" font-size="10" fill="#777">Out: {label, confidence, model_version}</text>
+  <text x="46" y="311" font-size="10" fill="#777">Nothing is stored. Restart = empty system.</text>
+
+  <!-- v1 -->
+  <rect x="306" y="104" width="266" height="214" rx="6" fill="#fafbfc" stroke="#ccc"/>
+  <text x="318" y="126" font-weight="bold" font-size="13" fill="#222">v1 — modular monolith</text>
+  <rect x="322" y="136" width="234" height="24" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="439" y="152" text-anchor="middle" font-size="11" fill="#222">router.py — HTTP in / HTTP out</text>
+  <line x1="439" y1="160" x2="439" y2="172" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="322" y="174" width="234" height="24" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="439" y="190" text-anchor="middle" font-size="11" fill="#222">service.py — the rules</text>
+  <line x1="439" y1="198" x2="439" y2="210" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="322" y="212" width="234" height="24" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="439" y="228" text-anchor="middle" font-size="11" fill="#222">repository.py — a Protocol</text>
+  <line x1="439" y1="236" x2="439" y2="248" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="322" y="250" width="234" height="28" rx="4" fill="#fff8e1" stroke="#333"/>
+  <text x="439" y="268" text-anchor="middle" font-size="11" fill="#222">dict in RAM + threading.Lock</text>
+  <text x="322" y="298" font-size="10" fill="#777">New: create_app() factory, Depends() wiring,</text>
+  <text x="322" y="311" font-size="10" fill="#777">needs_review when confidence &lt; 0.55.</text>
+
+  <!-- v2 -->
+  <rect x="582" y="104" width="266" height="214" rx="6" fill="#fafbfc" stroke="#ccc"/>
+  <text x="594" y="126" font-weight="bold" font-size="13" fill="#222">v2 — PostgreSQL</text>
+  <rect x="598" y="136" width="234" height="24" rx="4" fill="#eef1f4" stroke="#999"/>
+  <text x="715" y="152" text-anchor="middle" font-size="11" fill="#555">router.py → service.py (unchanged)</text>
+  <line x1="715" y1="160" x2="715" y2="172" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="598" y="174" width="234" height="38" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="715" y="190" text-anchor="middle" font-size="11" font-weight="bold" fill="#222">PostgresTicketRepository</text>
+  <text x="715" y="204" text-anchor="middle" font-size="10" fill="#555">same Protocol, different body</text>
+  <line x1="715" y1="212" x2="715" y2="224" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="598" y="226" width="234" height="24" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="715" y="242" text-anchor="middle" font-size="11" fill="#222">SQLAlchemy Session → SQL</text>
+  <line x1="715" y1="250" x2="715" y2="262" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="598" y="264" width="234" height="26" rx="4" fill="#fff8e1" stroke="#333"/>
+  <text x="715" y="281" text-anchor="middle" font-size="11" font-weight="bold" fill="#222">PostgreSQL 17 (Docker)</text>
+  <text x="598" y="306" font-size="10" fill="#777">The layers above did not change. That was the</text>
+  <text x="598" y="317" font-size="10" fill="#777">point of the repository interface in v1.</text>
+
+  <!-- v3 -->
+  <rect x="858" y="104" width="292" height="214" rx="6" fill="#fafbfc" stroke="#ccc"/>
+  <text x="870" y="126" font-weight="bold" font-size="13" fill="#222">v3 — pagination</text>
+  <rect x="874" y="136" width="260" height="38" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="1004" y="152" text-anchor="middle" font-size="11" font-weight="bold" fill="#222">router.py — the edge</text>
+  <text x="1004" y="166" text-anchor="middle" font-size="10" fill="#555">Query(ge=1, le=200) → 422 before the handler</text>
+  <line x1="1004" y1="174" x2="1004" y2="186" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="874" y="188" width="260" height="38" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="1004" y="204" text-anchor="middle" font-size="11" font-weight="bold" fill="#222">service.py — the policy</text>
+  <text x="1004" y="218" text-anchor="middle" font-size="10" fill="#555">max(1, min(limit, 200)) for non-HTTP callers too</text>
+  <line x1="1004" y1="226" x2="1004" y2="238" stroke="#444" stroke-width="1.3" marker-end="url(#a)"/>
+  <rect x="874" y="240" width="260" height="38" rx="4" fill="#e8f0fe" stroke="#333"/>
+  <text x="1004" y="256" text-anchor="middle" font-size="11" font-weight="bold" fill="#222">repository.py — the translation</text>
+  <text x="1004" y="270" text-anchor="middle" font-size="10" fill="#555">ORDER BY id LIMIT 50 OFFSET 100</text>
+  <text x="874" y="298" font-size="10" fill="#777">No new library, no new service. The fix was a</text>
+  <text x="874" y="311" font-size="10" fill="#777">bounded interface, enforced at two layers.</text>
+
+  <!-- ============ SECTION B: problem / change / measurement ============ -->
+  <text x="30" y="358" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">WHY EACH VERSION EXISTED — PROBLEM, CHANGE, MEASUREMENT</text>
+
+  <!-- header -->
+  <text x="42" y="386" font-size="11" font-weight="bold" fill="#666">VERSION</text>
+  <text x="152" y="386" font-size="11" font-weight="bold" fill="#c62828">THE PROBLEM THAT FORCED IT</text>
+  <text x="530" y="386" font-size="11" font-weight="bold" fill="#1565c0">WHAT CHANGED, AND WHERE</text>
+  <text x="890" y="386" font-size="11" font-weight="bold" fill="#555">MEASURED LOCALLY</text>
+  <line x1="30" y1="394" x2="1150" y2="394" stroke="#ccc"/>
+
+  <!-- row v0 -->
+  <rect x="30" y="400" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="443" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v0</text>
+  <text x="85" y="459" text-anchor="middle" font-size="10" fill="#666">baseline</text>
+  <rect x="146" y="400" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="420" font-size="11" fill="#333">There is no system yet. A support desk receives free-text</text>
+  <text x="158" y="436" font-size="11" fill="#333">messages and a human reads every one to decide where it goes.</text>
+  <text x="158" y="458" font-size="11" fill="#c62828">Problem: routing is manual and does not scale with volume.</text>
+  <text x="158" y="480" font-size="10" fill="#777">Requirement: classify the message automatically, and say how sure it is.</text>
+  <rect x="526" y="400" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="420" font-size="11" fill="#333">FastAPI service, one process, one file.</text>
+  <text x="538" y="438" font-size="11" fill="#333">TF-IDF + Logistic Regression trained on 200</text>
+  <text x="538" y="454" font-size="11" fill="#333">labelled tickets (ml/train.py → joblib artifact).</text>
+  <text x="538" y="476" font-size="10" fill="#777">Model loaded once at startup, not per request.</text>
+  <rect x="884" y="400" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="420" font-size="11" fill="#222">accuracy 0.90, macro-F1 0.90 (held-out)</text>
+  <text x="896" y="438" font-size="11" fill="#222">inference 1.68 ms per prediction</text>
+  <text x="896" y="456" font-size="11" fill="#222">throughput ~80 req/s, 1 worker</text>
+  <text x="896" y="478" font-size="10" fill="#777">at concurrency 10, P50 rose to 134 ms — queueing</text>
+
+  <!-- row v1 -->
+  <rect x="30" y="502" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="545" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v1</text>
+  <text x="85" y="561" text-anchor="middle" font-size="10" fill="#666">modular monolith</text>
+  <rect x="146" y="502" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="522" font-size="11" fill="#333">Everything lived in one file with module-level state. A test</text>
+  <text x="158" y="538" font-size="11" fill="#333">that set app.state.classifier = None broke a different test.</text>
+  <text x="158" y="560" font-size="11" fill="#c62828">Problem: the code cannot grow, and tests are not isolated.</text>
+  <text x="158" y="582" font-size="10" fill="#777">Also: a classified ticket was returned and then thrown away.</text>
+  <rect x="526" y="502" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="522" font-size="11" fill="#333">Module per feature, layers inside each module.</text>
+  <text x="538" y="538" font-size="11" fill="#333">create_app() factory — each test gets its own app.</text>
+  <text x="538" y="554" font-size="11" fill="#333">TicketRepository Protocol + in-memory implementation.</text>
+  <text x="538" y="576" font-size="10" fill="#777">Depends() injects the repository; tests swap in a fake.</text>
+  <rect x="884" y="502" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="522" font-size="11" fill="#222">43 tests passing</text>
+  <text x="896" y="540" font-size="11" fill="#222">same-session: v0 57.7 vs v1 55.2 req/s</text>
+  <text x="896" y="558" font-size="11" fill="#222">refactor cost ≈ 0.5 ms per request</text>
+  <text x="896" y="580" font-size="10" fill="#777">Proved: POST on :8000 → id 1, GET on :8001 → total 0</text>
+
+  <!-- row v2 -->
+  <rect x="30" y="604" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="647" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v2</text>
+  <text x="85" y="663" text-anchor="middle" font-size="10" fill="#666">postgresql</text>
+  <rect x="146" y="604" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="624" font-size="11" fill="#333">Storage was a Python dict. Restarting the API deleted every</text>
+  <text x="158" y="640" font-size="11" fill="#333">ticket, and two workers each held their own private truth.</text>
+  <text x="158" y="662" font-size="11" fill="#c62828">Problem: data does not survive, and does not exist once.</text>
+  <text x="158" y="684" font-size="10" fill="#777">Measured, not assumed: ids 1-4 appeared once per worker.</text>
+  <rect x="526" y="604" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="624" font-size="11" fill="#333">PostgreSQL 17 in Docker; SQLAlchemy 2.0 + psycopg 3.</text>
+  <text x="538" y="640" font-size="11" fill="#333">Alembic migration creates the tickets table.</text>
+  <text x="538" y="656" font-size="11" fill="#333">StorageError translated to HTTP 503 at the router.</text>
+  <text x="538" y="678" font-size="10" fill="#777">Only repository.py changed shape. Router and service did not.</text>
+  <rect x="884" y="604" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="624" font-size="11" fill="#222">durable write costs +14.5 ms P50</text>
+  <text x="896" y="642" font-size="11" fill="#222">48.6 → 27.6 req/s on POST /tickets</text>
+  <text x="896" y="660" font-size="11" fill="#222">3006 concurrent inserts → 3006 distinct ids</text>
+  <text x="896" y="682" font-size="10" fill="#777">Unexpected: concurrency began helping (27.6 → 44.5 req/s)</text>
+
+  <!-- row v3 -->
+  <rect x="30" y="706" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="749" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v3</text>
+  <text x="85" y="765" text-anchor="middle" font-size="10" fill="#666">pagination</text>
+  <rect x="146" y="706" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="726" font-size="11" fill="#333">GET /tickets returned the whole table. With 13,000 rows one</text>
+  <text x="158" y="742" font-size="11" fill="#333">request occupied a worker for 2.18 seconds.</text>
+  <text x="158" y="764" font-size="11" fill="#c62828">Problem: the caller decided how much work the server did.</text>
+  <text x="158" y="786" font-size="10" fill="#777">That is an availability risk, not just a slow endpoint.</text>
+  <rect x="526" y="706" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="726" font-size="11" fill="#333">limit / offset, default 50, hard ceiling 200.</text>
+  <text x="538" y="742" font-size="11" fill="#333">Enforced twice: FastAPI returns 422 at the edge, and</text>
+  <text x="538" y="758" font-size="11" fill="#333">the service clamps again for callers with no HTTP layer.</text>
+  <text x="538" y="780" font-size="10" fill="#777">list() and count() share _filtered(), so page and total agree.</text>
+  <rect x="884" y="706" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="726" font-size="11" fill="#222">2180 ms → ~90 ms (page of 50, warm)</text>
+  <text x="896" y="744" font-size="11" fill="#222">page query itself: 0.36 ms in the database</text>
+  <text x="896" y="762" font-size="11" fill="#222">OFFSET 12900 walks 12,950 entries → 6.17 ms</text>
+  <text x="896" y="784" font-size="10" fill="#777">Work now depends on limit, not on table size</text>
+
+
+  <!-- row v4 -->
+  <rect x="30" y="808" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="851" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v4</text>
+  <text x="85" y="867" text-anchor="middle" font-size="10" fill="#666">authentication</text>
+  <rect x="146" y="808" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="828" font-size="11" fill="#333">Every request was anonymous. No column anywhere recorded who</text>
+  <text x="158" y="844" font-size="11" fill="#333">created a row, and anyone reaching the port read every ticket.</text>
+  <text x="158" y="866" font-size="11" fill="#c62828">Problem: data had no owner, so no rule could be written.</text>
+  <text x="158" y="888" font-size="10" fill="#777">Trigger is a precondition, not a measurement: v5 adds documents.</text>
+  <rect x="526" y="808" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="828" font-size="11" fill="#333">organizations + users tables; tickets.organization_id NOT NULL.</text>
+  <text x="538" y="844" font-size="11" fill="#333">bcrypt hashing; login returns a signed JWT.</text>
+  <text x="538" y="860" font-size="11" fill="#333">get_current_user runs before every protected handler.</text>
+  <text x="538" y="882" font-size="10" fill="#777">organization_id is a REQUIRED argument: forgetting it is a TypeError,</text>
+  <text x="538" y="894" font-size="10" fill="#777">not a silent leak. Cross-tenant reads answer 404, never 403.</text>
+  <rect x="884" y="808" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="828" font-size="11" fill="#222">login P50 682 ms — entirely bcrypt</text>
+  <text x="896" y="846" font-size="11" fill="#222">users lookup per request 0.183 ms</text>
+  <text x="896" y="864" font-size="11" fill="#222">tenant filter, warm: 0.128 vs 0.145 ms</text>
+  <text x="896" y="886" font-size="10" fill="#777">99 tests. Suite 7 s → 103 s, ~60% of it bcrypt.</text>
+
+  <!-- next -->
+  <rect x="30" y="926" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
+  <text x="44" y="948" font-size="12" font-weight="bold" fill="#222">Open after v4 — what the next versions must answer</text>
+  <text x="44" y="968" font-size="11.5" fill="#333">1. POST /classify is still public and burns CPU per call: the v3 problem again, with compute instead of rows. Needs auth + per-caller rate limiting.</text>
+  <text x="44" y="984" font-size="11.5" fill="#333">2. /auth/login is a 682 ms UNAUTHENTICATED request — a denial-of-service surface this version created.   3. No token revocation before expiry.</text>
+  <text x="44" y="1000" font-size="11.5" fill="#333">4. total still costs more than the page (5.78 ms vs 0.128 ms), improved by accident not design.   5. Still no type checker.   6. Suite at 103 s.</text>
+</svg>
