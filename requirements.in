@@ -24,3 +24,7 @@ alembic>=1.13
 bcrypt>=4.2               # Password hashing: deliberately slow, salted per password
 pyjwt>=2.9                # Signs and verifies the access token (JSON Web Token)
 email-validator>=2.2      # Backs pydantic's EmailStr type; checks address format
+
+# --- Documents -------------------------------------------------------------
+python-multipart>=0.0.9   # Lets FastAPI parse file uploads (multipart/form-data)
+pypdf>=5.0                # Extracts text from PDF files; pure Python, no system libraries

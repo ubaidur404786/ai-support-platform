@@ -1,0 +1,30 @@
+{"question": "How long does a refund take?", "expected_document": "refund-policy.md", "type": "lexical"}
+{"question": "How do I reset my password?", "expected_document": "reset-password.md", "type": "lexical"}
+{"question": "How do I enable two-factor authentication?", "expected_document": "two-factor-authentication.md", "type": "lexical"}
+{"question": "Where can I download my invoices?", "expected_document": "invoices-and-receipts.md", "type": "lexical"}
+{"question": "How do I invite teammates?", "expected_document": "team-members-invite.md", "type": "lexical"}
+{"question": "Which browsers are supported?", "expected_document": "supported-browsers.md", "type": "lexical"}
+{"question": "What is the maximum attachment size?", "expected_document": "file-upload-limits.md", "type": "lexical"}
+{"question": "How do I create an API key?", "expected_document": "api-keys.md", "type": "lexical"}
+{"question": "How do I export my data as CSV?", "expected_document": "data-export.md", "type": "lexical"}
+{"question": "How do I cancel my subscription?", "expected_document": "cancel-subscription.md", "type": "lexical"}
+{"question": "When is the support team available?", "expected_document": "contact-support.md", "type": "lexical"}
+{"question": "How do I upgrade my plan?", "expected_document": "plan-upgrade-downgrade.md", "type": "lexical"}
+{"question": "Is my data encrypted at rest?", "expected_document": "data-security.md", "type": "lexical"}
+{"question": "Where is the status page for outages?", "expected_document": "service-status.md", "type": "lexical"}
+{"question": "Why does the API return 429 Too Many Requests?", "expected_document": "api-rate-limits.md", "type": "lexical"}
+{"question": "Can I get my money back?", "expected_document": "refund-policy.md", "type": "paraphrase"}
+{"question": "I forgot my login details", "expected_document": "reset-password.md", "type": "paraphrase"}
+{"question": "The six digit number from my phone app is not accepted", "expected_document": "two-factor-authentication.md", "type": "paraphrase"}
+{"question": "How do I stop being charged every month?", "expected_document": "cancel-subscription.md", "type": "paraphrase"}
+{"question": "My card expired, how do I put in a new one?", "expected_document": "change-billing-details.md", "type": "paraphrase"}
+{"question": "Can a colleague get access to our account?", "expected_document": "team-members-invite.md", "type": "paraphrase"}
+{"question": "How can I make someone an admin?", "expected_document": "roles-and-permissions.md", "type": "paraphrase"}
+{"question": "I want you to forget everything you know about me", "expected_document": "privacy-requests.md", "type": "paraphrase"}
+{"question": "Can I close our company account for good?", "expected_document": "delete-account.md", "type": "paraphrase"}
+{"question": "Your website is not loading, is it down for everyone?", "expected_document": "service-status.md", "type": "paraphrase"}
+{"question": "Is there a cap on how often my integration can call you?", "expected_document": "api-rate-limits.md", "type": "paraphrase"}
+{"question": "How can I get all our tickets into a spreadsheet?", "expected_document": "data-export.md", "type": "paraphrase"}
+{"question": "Edits on my phone don't show up on my laptop", "expected_document": "mobile-app-sync.md", "type": "paraphrase"}
+{"question": "Who at your company can look at our information?", "expected_document": "data-security.md", "type": "paraphrase"}
+{"question": "When can I talk to a human?", "expected_document": "contact-support.md", "type": "paraphrase"}

@@ -22,6 +22,7 @@ from app.tickets import models  # noqa: F401
 # would rebind the name and the first would be discarded. The import exists only
 # for its side effect - registering tables on Base.metadata.
 from app.auth import models as auth_models  # noqa: F401
+from app.documents import models as document_models  # noqa: F401
 
 config.set_main_option("sqlalchemy.url", settings.database_url)
 

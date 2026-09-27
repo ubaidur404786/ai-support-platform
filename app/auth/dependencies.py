@@ -108,3 +108,16 @@ def limit_inference(
     dependency once per request and reuses the result.
     """
     enforce(request, "inference", f"user:{current_user.id}")
+
+
+def limit_ingestion(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Budget for document uploads, per user.
+
+    Separate from inference: an upload costs extraction and chunking rather than
+    model time, and one budget for both would let a burst of uploads lock a user
+    out of classifying tickets.
+    """
+    enforce(request, "ingestion", f"user:{current_user.id}")

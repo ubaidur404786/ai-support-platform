@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.5.0"
+    app_version: str = "0.6.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -56,6 +56,26 @@ class Settings(BaseSettings):
     # Model inference (POST /classify and POST /tickets), per user. One budget for
     # both, because both spend the same resource: the classifier's CPU time.
     inference_rate_limit_per_minute: int = 60
+    # Document uploads, per user. Extraction and chunking run inside the request,
+    # so an upload is the most expensive thing an authenticated user can ask for.
+    ingestion_rate_limit_per_minute: int = 20
+
+    # Documents. Every limit here bounds the work ONE upload can cause (ADR-011).
+    # 5 MB is far above a typical help article and well below what would keep a
+    # worker busy for a long time. The page limit exists because PDF size and
+    # PDF work are not proportional: a small file can hold many pages.
+    max_document_bytes: int = 5_000_000
+    max_document_pages: int = 300
+    # Chunk size in characters. ~800 characters is roughly one or two paragraphs:
+    # small enough that a search result is a readable passage, large enough to
+    # keep a sentence with its context. A starting guess, to be evaluated.
+    chunk_max_chars: int = 800
+    # Characters repeated between neighbouring chunks, so a sentence cut at a
+    # boundary still appears whole in one of them.
+    chunk_overlap_chars: int = 100
+    # Upper bound on search results per request, for the same reason as
+    # max_page_size.
+    max_search_results: int = 20
 
     # Read a .env file if present; real environment variables take priority over it.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

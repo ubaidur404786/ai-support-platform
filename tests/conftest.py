@@ -59,12 +59,13 @@ def clean_database():
     RESTART IDENTITY sets sequences back to 1 so ids are predictable.
     """
     with engine.begin() as connection:
-        # One statement for all three tables. TRUNCATE on tickets alone would
+        # One statement for every table. TRUNCATE on tickets alone would
         # fail now that a foreign key points at organizations, and listing them
         # together lets PostgreSQL drop the constraint check for the duration.
         connection.execute(
             text(
-                "TRUNCATE TABLE tickets, users, organizations RESTART IDENTITY CASCADE"
+                "TRUNCATE TABLE document_chunks, documents, tickets, users, organizations "
+                "RESTART IDENTITY CASCADE"
             )
         )
     yield

@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="1010" viewBox="0 0 1040 1010" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c62828"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="1010" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v6 — Document ingestion and keyword search</text>
+  <text x="30" y="56" fill="#555">PROBLEM: a "knowledge" platform with no knowledge — nowhere to store a document, nothing to read a file, nothing to find a passage.</text>
+  <text x="30" y="74" fill="#555">FIX: upload → extract → ~800-char overlapping chunks → PostgreSQL with a tsvector + GIN index. Keyword search is the BASELINE embeddings must beat.</text>
+
+  <!-- PATH A: ingestion -->
+  <text x="30" y="108" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">PATH A — INGEST: POST /documents</text>
+  <rect x="30" y="118" width="560" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="42" y="138" font-family="Consolas, monospace" fill="#333" font-size="11">multipart/form-data   file=refund-policy.pdf   Authorization: Bearer eyJ…</text>
+  <text x="42" y="154" fill="#666" font-size="10">.txt / .md / .pdf, ≤ 5 MB, ≤ 300 pages</text>
+  <line x1="310" y1="162" x2="310" y2="180" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="30" y="182" width="560" height="44" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="42" y="201" font-weight="bold" fill="#222" font-size="12">core/request_limits.py — middleware, BEFORE auth</text>
+  <text x="42" y="218" fill="#666" font-size="10">Content-Length &gt; 5 MB + 64 KB → 413 from the header alone (0 body bytes read)</text>
+  <line x1="310" y1="226" x2="310" y2="244" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="610" y="170" width="400" height="74" rx="6" fill="#fdf0ef" stroke="#c62828" stroke-width="1.5"/>
+  <text x="622" y="190" font-weight="bold" fill="#222" font-size="12">Found by measuring: body parsed before auth</text>
+  <text x="622" y="208" fill="#333" font-size="11">Anonymous 200 MB upload → received in full → 401</text>
+  <text x="622" y="224" fill="#333" font-size="11">after 4,146 ms. Now: 413 in 1.4–3.2 ms.</text>
+  <text x="622" y="238" fill="#666" font-size="10">Chunked uploads (no Content-Length) still bypass — proxy's job.</text>
+
+  <rect x="30" y="246" width="560" height="44" rx="6" fill="#e8f0fe" stroke="#333" stroke-width="1.5"/>
+  <text x="42" y="265" font-weight="bold" fill="#222" font-size="12">get_current_user → limit_ingestion (20/min per user) → documents/router.py</text>
+  <text x="42" y="282" fill="#666" font-size="10">Its own budget: a burst of uploads cannot lock a user out of classifying tickets.</text>
+  <line x1="310" y1="290" x2="310" y2="308" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="30" y="310" width="560" height="44" rx="6" fill="#e8f0fe" stroke="#333" stroke-width="1.5"/>
+  <text x="42" y="329" font-weight="bold" fill="#222" font-size="12">documents/service.py — SHA-256 of the bytes</text>
+  <text x="42" y="346" fill="#666" font-size="10">Already stored in this organisation? 409 — before any extraction. Unique (organization_id, sha256) closes the race.</text>
+  <line x1="310" y1="354" x2="310" y2="372" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="30" y="374" width="560" height="58" rx="6" fill="#e8f0fe" stroke="#333" stroke-width="1.5"/>
+  <text x="42" y="393" font-weight="bold" fill="#222" font-size="12">documents/extraction.py → documents/chunking.py</text>
+  <text x="42" y="410" fill="#333" font-size="11">type from name AND first bytes ("%PDF-") · pypdf · strip NUL · no text → 422</text>
+  <text x="42" y="425" fill="#333" font-size="11">split at paragraph → sentence → word, ≤ 800 chars, 100 chars overlap, exact offsets</text>
+  <line x1="310" y1="432" x2="310" y2="450" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="30" y="452" width="560" height="58" rx="6" fill="#fff8e1" stroke="#333" stroke-width="1.5"/>
+  <text x="42" y="471" font-weight="bold" fill="#222" font-size="12">documents/repository.py → PostgreSQL, ONE transaction</text>
+  <text x="42" y="488" font-family="Consolas, monospace" fill="#333" font-size="10">documents (1 row: title, organization_id, content, sha256)</text>
+  <text x="42" y="502" font-family="Consolas, monospace" fill="#333" font-size="10">document_chunks (N rows: text, search_vector GENERATED, GIN index)</text>
+
+  <rect x="610" y="374" width="400" height="136" rx="6" fill="#fdf0ef" stroke="#c62828" stroke-width="1.5"/>
+  <text x="622" y="394" font-weight="bold" fill="#222" font-size="12">The cost: ingestion runs INSIDE the request</text>
+  <text x="622" y="414" font-family="Consolas, monospace" fill="#333" font-size="11">txt 10 KB       165 ms</text>
+  <text x="622" y="430" font-family="Consolas, monospace" fill="#333" font-size="11">txt 1 MB      2,372 ms  (1,737 chunks)</text>
+  <text x="622" y="446" font-family="Consolas, monospace" fill="#333" font-size="11">txt 4.9 MB    8,406 ms  (8,518 chunks)</text>
+  <text x="622" y="462" font-family="Consolas, monospace" fill="#333" font-size="11">pdf 100 pages 3,594 ms  (extract 2.5 s)</text>
+  <text x="622" y="478" font-family="Consolas, monospace" fill="#333" font-size="11">pdf 300 pages 5,774 ms</text>
+  <text x="622" y="498" fill="#666" font-size="10">P50 POST /documents. The worker serves nothing else meanwhile.</text>
+
+  <line x1="310" y1="510" x2="310" y2="528" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="320" y="524" fill="#666" font-size="11">201 {"id": 12, "title": "Refund policy", "chunk_count": 14}</text>
+
+  <!-- PATH B: search -->
+  <text x="30" y="560" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">PATH B — FIND: GET /documents/search?q=how long does a refund take</text>
+  <rect x="30" y="570" width="560" height="44" rx="6" fill="#e8f0fe" stroke="#333" stroke-width="1.5"/>
+  <text x="42" y="589" font-weight="bold" fill="#222" font-size="12">service.py — keep [a-z0-9] words only (max 32)</text>
+  <text x="42" y="606" fill="#666" font-size="10">tsquery operators never pass through: "refund') | !(x" is harmless; no words → 422</text>
+  <line x1="310" y1="614" x2="310" y2="632" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="30" y="634" width="560" height="58" rx="6" fill="#fff8e1" stroke="#333" stroke-width="1.5"/>
+  <text x="42" y="653" font-weight="bold" fill="#222" font-size="12">repository.py — one SQL query</text>
+  <text x="42" y="670" font-family="Consolas, monospace" fill="#333" font-size="10">WHERE organization_id = 3 AND search_vector @@ 'how | long | refund | take'</text>
+  <text x="42" y="684" font-family="Consolas, monospace" fill="#333" font-size="10">ORDER BY ts_rank(...) DESC LIMIT 5          (stems: refunds → refund)</text>
+  <line x1="310" y1="692" x2="310" y2="710" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="320" y="706" fill="#666" font-size="11">[{"document_title": "Refund policy", "chunk_index": 0, "text": "Refunds are…"}]</text>
+
+  <rect x="610" y="570" width="400" height="122" rx="6" fill="#eef4fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="622" y="590" font-weight="bold" fill="#222" font-size="12">ts_rank, chosen by measurement</text>
+  <text x="622" y="610" fill="#333" font-size="11">First choice ts_rank_cd ranks every MATCHING chunk</text>
+  <text x="622" y="626" fill="#333" font-size="11">before LIMIT. At 39,588 chunks, common words:</text>
+  <text x="622" y="646" font-family="Consolas, monospace" fill="#333" font-size="11">ts_rank_cd  5,909 ms  →  ts_rank  108 ms</text>
+  <text x="622" y="666" fill="#333" font-size="11">Evaluation no worse: hit@3 0.73 both, MRR 0.64 → 0.66.</text>
+  <text x="622" y="682" fill="#666" font-size="10">Synthetic 50-word corpus: ~95% of chunks match — a worst case.</text>
+
+  <!-- Measurements -->
+  <text x="30" y="746" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">MEASURED LOCALLY — RETRIEVAL BASELINE, 20 ARTICLES, 30 QUESTIONS, match=any, ts_rank</text>
+
+  <rect x="30" y="760" width="320" height="100" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="42" y="780" font-size="12" fill="#222"><tspan font-weight="bold">Questions that reuse the words</tspan></text>
+  <text x="42" y="800" font-size="12" fill="#222">"How do I reset my password?"</text>
+  <text x="42" y="820" font-size="12" fill="#222">hit@3 1.00 · MRR 1.00 · n=15</text>
+  <text x="42" y="840" font-size="11" fill="#666">An upper bound: articles and questions</text>
+  <text x="42" y="853" font-size="11" fill="#666">were written by the same author.</text>
+
+  <rect x="360" y="760" width="320" height="100" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="372" y="780" font-size="12" fill="#222"><tspan font-weight="bold">Questions that paraphrase</tspan></text>
+  <text x="372" y="800" font-size="12" fill="#222">"Can I get my money back?" → nothing</text>
+  <text x="372" y="820" font-size="12" fill="#222">hit@3 0.47 · MRR 0.31 · 20% empty</text>
+  <text x="372" y="840" font-size="11" fill="#666">Every miss is a vocabulary mismatch:</text>
+  <text x="372" y="853" font-size="11" fill="#666">"admin" vs "Administrators", "forget" vs "erase".</text>
+
+  <rect x="690" y="760" width="320" height="100" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="702" y="780" font-size="12" fill="#222"><tspan font-weight="bold">Query plans (second run)</tspan></text>
+  <text x="702" y="800" font-size="11" fill="#222">word in no chunk: GIN Bitmap Scan   0.356 ms</text>
+  <text x="702" y="818" font-size="11" fill="#222">20-chunk org: org-id Index Scan     0.517 ms</text>
+  <text x="702" y="836" font-size="11" fill="#222">95% of chunks match: Seq Scan       84.6 ms</text>
+  <text x="702" y="853" font-size="11" fill="#666">GIN declined when it selects almost everything.</text>
+
+  <rect x="30" y="872" width="980" height="118" rx="4" fill="#fdf0ef" stroke="#c62828"/>
+  <text x="42" y="892" font-size="12" fill="#222"><tspan font-weight="bold">Next limitations — two measured triggers:</tspan></text>
+  <text x="42" y="912" font-size="11.5" fill="#333">1. Keyword search does not understand meaning: paraphrase hit@3 0.47, 20% return nothing → EMBEDDINGS (v8) + vector search (v9), compared on the same 30 questions.</text>
+  <text x="42" y="930" font-size="11.5" fill="#333">2. Ingestion blocks the request: 300-page PDF 5.8 s, 4.9 MB text 8.4 s per upload → BACKGROUND PROCESSING (v7): accept, return 202, extract in a worker.</text>
+  <text x="42" y="948" font-size="11.5" fill="#333">3. Search cost grows with the number of MATCHING chunks, not with limit — v3's problem, inside the database.   4. Originals not kept (ADR-019).</text>
+  <text x="42" y="966" font-size="11.5" fill="#333">5. Streamed uploads without Content-Length bypass the size check.   6. English-only stemming.   7. Test suite 187 s (180 tests).</text>
+  <text x="42" y="982" font-size="10" fill="#777">All numbers: one session, DB_ECHO=false, no --reload, httpx client, PostgreSQL 17 in Docker on a Windows 11 laptop.</text>
+</svg>

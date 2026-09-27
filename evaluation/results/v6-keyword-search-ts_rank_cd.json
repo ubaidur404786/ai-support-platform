@@ -1,0 +1,633 @@
+[
+  {
+    "match": "any",
+    "overall": {
+      "questions": 30,
+      "hit@1": 0.5666666666666667,
+      "hit@3": 0.7333333333333333,
+      "hit@5": 0.7333333333333333,
+      "mrr": 0.638888888888889,
+      "empty": 0.1
+    },
+    "lexical": {
+      "questions": 15,
+      "hit@1": 1.0,
+      "hit@3": 1.0,
+      "hit@5": 1.0,
+      "mrr": 1.0,
+      "empty": 0.0
+    },
+    "paraphrase": {
+      "questions": 15,
+      "hit@1": 0.13333333333333333,
+      "hit@3": 0.4666666666666667,
+      "hit@5": 0.4666666666666667,
+      "mrr": 0.2777777777777778,
+      "empty": 0.2
+    },
+    "latency_ms_p50": 31.19315000003553,
+    "questions": [
+      {
+        "question": "How long does a refund take?",
+        "expected_document": "refund-policy.md",
+        "type": "lexical",
+        "returned": [
+          "refund-policy.md",
+          "plan-upgrade-downgrade.md",
+          "roles-and-permissions.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I reset my password?",
+        "expected_document": "reset-password.md",
+        "type": "lexical",
+        "returned": [
+          "reset-password.md",
+          "two-factor-authentication.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I enable two-factor authentication?",
+        "expected_document": "two-factor-authentication.md",
+        "type": "lexical",
+        "returned": [
+          "two-factor-authentication.md",
+          "data-security.md",
+          "supported-browsers.md",
+          "contact-support.md",
+          "mobile-app-sync.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Where can I download my invoices?",
+        "expected_document": "invoices-and-receipts.md",
+        "type": "lexical",
+        "returned": [
+          "invoices-and-receipts.md",
+          "change-billing-details.md",
+          "cancel-subscription.md",
+          "data-export.md",
+          "refund-policy.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I invite teammates?",
+        "expected_document": "team-members-invite.md",
+        "type": "lexical",
+        "returned": [
+          "team-members-invite.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Which browsers are supported?",
+        "expected_document": "supported-browsers.md",
+        "type": "lexical",
+        "returned": [
+          "supported-browsers.md",
+          "contact-support.md",
+          "api-rate-limits.md",
+          "file-upload-limits.md",
+          "invoices-and-receipts.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "What is the maximum attachment size?",
+        "expected_document": "file-upload-limits.md",
+        "type": "lexical",
+        "returned": [
+          "file-upload-limits.md",
+          "data-export.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I create an API key?",
+        "expected_document": "api-keys.md",
+        "type": "lexical",
+        "returned": [
+          "api-keys.md",
+          "api-rate-limits.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I export my data as CSV?",
+        "expected_document": "data-export.md",
+        "type": "lexical",
+        "returned": [
+          "data-export.md",
+          "privacy-requests.md",
+          "cancel-subscription.md",
+          "data-security.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I cancel my subscription?",
+        "expected_document": "cancel-subscription.md",
+        "type": "lexical",
+        "returned": [
+          "cancel-subscription.md",
+          "refund-policy.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "When is the support team available?",
+        "expected_document": "contact-support.md",
+        "type": "lexical",
+        "returned": [
+          "contact-support.md",
+          "supported-browsers.md",
+          "api-rate-limits.md",
+          "data-security.md",
+          "file-upload-limits.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I upgrade my plan?",
+        "expected_document": "plan-upgrade-downgrade.md",
+        "type": "lexical",
+        "returned": [
+          "plan-upgrade-downgrade.md",
+          "refund-policy.md",
+          "api-rate-limits.md",
+          "team-members-invite.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Is my data encrypted at rest?",
+        "expected_document": "data-security.md",
+        "type": "lexical",
+        "returned": [
+          "data-security.md",
+          "privacy-requests.md",
+          "data-export.md",
+          "cancel-subscription.md",
+          "plan-upgrade-downgrade.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Where is the status page for outages?",
+        "expected_document": "service-status.md",
+        "type": "lexical",
+        "returned": [
+          "service-status.md",
+          "api-keys.md",
+          "api-rate-limits.md",
+          "change-billing-details.md",
+          "reset-password.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Why does the API return 429 Too Many Requests?",
+        "expected_document": "api-rate-limits.md",
+        "type": "lexical",
+        "returned": [
+          "api-rate-limits.md",
+          "api-keys.md",
+          "privacy-requests.md",
+          "refund-policy.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Can I get my money back?",
+        "expected_document": "refund-policy.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "I forgot my login details",
+        "expected_document": "reset-password.md",
+        "type": "paraphrase",
+        "returned": [
+          "reset-password.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "The six digit number from my phone app is not accepted",
+        "expected_document": "two-factor-authentication.md",
+        "type": "paraphrase",
+        "returned": [
+          "mobile-app-sync.md",
+          "two-factor-authentication.md",
+          "invoices-and-receipts.md",
+          "change-billing-details.md",
+          "contact-support.md"
+        ],
+        "rank": 2
+      },
+      {
+        "question": "How do I stop being charged every month?",
+        "expected_document": "cancel-subscription.md",
+        "type": "paraphrase",
+        "returned": [
+          "refund-policy.md",
+          "api-keys.md",
+          "cancel-subscription.md",
+          "change-billing-details.md",
+          "data-security.md"
+        ],
+        "rank": 3
+      },
+      {
+        "question": "My card expired, how do I put in a new one?",
+        "expected_document": "change-billing-details.md",
+        "type": "paraphrase",
+        "returned": [
+          "team-members-invite.md",
+          "roles-and-permissions.md",
+          "change-billing-details.md",
+          "reset-password.md",
+          "api-keys.md"
+        ],
+        "rank": 3
+      },
+      {
+        "question": "Can a colleague get access to our account?",
+        "expected_document": "team-members-invite.md",
+        "type": "paraphrase",
+        "returned": [
+          "privacy-requests.md",
+          "change-billing-details.md",
+          "data-security.md",
+          "refund-policy.md"
+        ],
+        "rank": null
+      },
+      {
+        "question": "How can I make someone an admin?",
+        "expected_document": "roles-and-permissions.md",
+        "type": "paraphrase",
+        "returned": [
+          "delete-account.md",
+          "invoices-and-receipts.md",
+          "reset-password.md",
+          "team-members-invite.md"
+        ],
+        "rank": null
+      },
+      {
+        "question": "I want you to forget everything you know about me",
+        "expected_document": "privacy-requests.md",
+        "type": "paraphrase",
+        "returned": [
+          "cancel-subscription.md",
+          "delete-account.md",
+          "refund-policy.md"
+        ],
+        "rank": null
+      },
+      {
+        "question": "Can I close our company account for good?",
+        "expected_document": "delete-account.md",
+        "type": "paraphrase",
+        "returned": [
+          "change-billing-details.md",
+          "invoices-and-receipts.md",
+          "privacy-requests.md",
+          "reset-password.md"
+        ],
+        "rank": null
+      },
+      {
+        "question": "Your website is not loading, is it down for everyone?",
+        "expected_document": "service-status.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "Is there a cap on how often my integration can call you?",
+        "expected_document": "api-rate-limits.md",
+        "type": "paraphrase",
+        "returned": [
+          "api-keys.md",
+          "api-rate-limits.md",
+          "delete-account.md",
+          "roles-and-permissions.md"
+        ],
+        "rank": 2
+      },
+      {
+        "question": "How can I get all our tickets into a spreadsheet?",
+        "expected_document": "data-export.md",
+        "type": "paraphrase",
+        "returned": [
+          "data-export.md",
+          "mobile-app-sync.md",
+          "roles-and-permissions.md",
+          "delete-account.md",
+          "file-upload-limits.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Edits on my phone don't show up on my laptop",
+        "expected_document": "mobile-app-sync.md",
+        "type": "paraphrase",
+        "returned": [
+          "invoices-and-receipts.md",
+          "mobile-app-sync.md",
+          "two-factor-authentication.md"
+        ],
+        "rank": 2
+      },
+      {
+        "question": "Who at your company can look at our information?",
+        "expected_document": "data-security.md",
+        "type": "paraphrase",
+        "returned": [
+          "invoices-and-receipts.md",
+          "reset-password.md",
+          "supported-browsers.md"
+        ],
+        "rank": null
+      },
+      {
+        "question": "When can I talk to a human?",
+        "expected_document": "contact-support.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      }
+    ]
+  },
+  {
+    "match": "all",
+    "overall": {
+      "questions": 30,
+      "hit@1": 0.4,
+      "hit@3": 0.4,
+      "hit@5": 0.4,
+      "mrr": 0.4,
+      "empty": 0.6
+    },
+    "lexical": {
+      "questions": 15,
+      "hit@1": 0.8,
+      "hit@3": 0.8,
+      "hit@5": 0.8,
+      "mrr": 0.8,
+      "empty": 0.2
+    },
+    "paraphrase": {
+      "questions": 15,
+      "hit@1": 0.0,
+      "hit@3": 0.0,
+      "hit@5": 0.0,
+      "mrr": 0.0,
+      "empty": 1.0
+    },
+    "latency_ms_p50": 30.546599999979662,
+    "questions": [
+      {
+        "question": "How long does a refund take?",
+        "expected_document": "refund-policy.md",
+        "type": "lexical",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "How do I reset my password?",
+        "expected_document": "reset-password.md",
+        "type": "lexical",
+        "returned": [
+          "reset-password.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I enable two-factor authentication?",
+        "expected_document": "two-factor-authentication.md",
+        "type": "lexical",
+        "returned": [
+          "two-factor-authentication.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Where can I download my invoices?",
+        "expected_document": "invoices-and-receipts.md",
+        "type": "lexical",
+        "returned": [
+          "invoices-and-receipts.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I invite teammates?",
+        "expected_document": "team-members-invite.md",
+        "type": "lexical",
+        "returned": [
+          "team-members-invite.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Which browsers are supported?",
+        "expected_document": "supported-browsers.md",
+        "type": "lexical",
+        "returned": [
+          "supported-browsers.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "What is the maximum attachment size?",
+        "expected_document": "file-upload-limits.md",
+        "type": "lexical",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "How do I create an API key?",
+        "expected_document": "api-keys.md",
+        "type": "lexical",
+        "returned": [
+          "api-keys.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I export my data as CSV?",
+        "expected_document": "data-export.md",
+        "type": "lexical",
+        "returned": [
+          "data-export.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I cancel my subscription?",
+        "expected_document": "cancel-subscription.md",
+        "type": "lexical",
+        "returned": [
+          "cancel-subscription.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "When is the support team available?",
+        "expected_document": "contact-support.md",
+        "type": "lexical",
+        "returned": [
+          "contact-support.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "How do I upgrade my plan?",
+        "expected_document": "plan-upgrade-downgrade.md",
+        "type": "lexical",
+        "returned": [
+          "plan-upgrade-downgrade.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Is my data encrypted at rest?",
+        "expected_document": "data-security.md",
+        "type": "lexical",
+        "returned": [
+          "data-security.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Where is the status page for outages?",
+        "expected_document": "service-status.md",
+        "type": "lexical",
+        "returned": [
+          "service-status.md"
+        ],
+        "rank": 1
+      },
+      {
+        "question": "Why does the API return 429 Too Many Requests?",
+        "expected_document": "api-rate-limits.md",
+        "type": "lexical",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "Can I get my money back?",
+        "expected_document": "refund-policy.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "I forgot my login details",
+        "expected_document": "reset-password.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "The six digit number from my phone app is not accepted",
+        "expected_document": "two-factor-authentication.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "How do I stop being charged every month?",
+        "expected_document": "cancel-subscription.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "My card expired, how do I put in a new one?",
+        "expected_document": "change-billing-details.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "Can a colleague get access to our account?",
+        "expected_document": "team-members-invite.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "How can I make someone an admin?",
+        "expected_document": "roles-and-permissions.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "I want you to forget everything you know about me",
+        "expected_document": "privacy-requests.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "Can I close our company account for good?",
+        "expected_document": "delete-account.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "Your website is not loading, is it down for everyone?",
+        "expected_document": "service-status.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "Is there a cap on how often my integration can call you?",
+        "expected_document": "api-rate-limits.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "How can I get all our tickets into a spreadsheet?",
+        "expected_document": "data-export.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "Edits on my phone don't show up on my laptop",
+        "expected_document": "mobile-app-sync.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "Who at your company can look at our information?",
+        "expected_document": "data-security.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      },
+      {
+        "question": "When can I talk to a human?",
+        "expected_document": "contact-support.md",
+        "type": "paraphrase",
+        "returned": [],
+        "rank": null
+      }
+    ]
+  }
+]
