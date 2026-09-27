@@ -2,13 +2,19 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.auth.dependencies import get_auth_service
+from app.auth.dependencies import get_auth_service, limit_auth_attempts
 from app.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from app.auth.service import AuthService, EmailAlreadyRegistered, InvalidCredentials
 from app.core.config import settings
 from app.core.errors import StorageError
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+# The limit is declared on the router, so it covers every endpoint in this file,
+# including any added later. Both current endpoints run bcrypt.
+router = APIRouter(
+    prefix="/auth",
+    tags=["auth"],
+    dependencies=[Depends(limit_auth_attempts)],
+)
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

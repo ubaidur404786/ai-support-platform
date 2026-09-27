@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.4.0"
+    app_version: str = "0.5.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     # Short-lived tokens limit the damage of a stolen one. Short enough to matter,
     # long enough that we do not need refresh tokens yet.
     access_token_expire_minutes: int = 60
+
+    # Per-caller limits. False switches every limit off - used to measure the
+    # "before" numbers, never meant for a deployment.
+    rate_limit_enabled: bool = True
+    # Login and registration, per client address: there is no user yet to key
+    # on. Each attempt costs ~680 ms of bcrypt, so 10 a minute is still far more
+    # than any person typing a password needs.
+    auth_rate_limit_per_minute: int = 10
+    # Model inference (POST /classify and POST /tickets), per user. One budget for
+    # both, because both spend the same resource: the classifier's CPU time.
+    inference_rate_limit_per_minute: int = 60
 
     # Read a .env file if present; real environment variables take priority over it.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

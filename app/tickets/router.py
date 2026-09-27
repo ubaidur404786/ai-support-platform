@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, limit_inference
 from app.auth.models import User
 from app.core.config import settings
 from app.tickets.dependencies import get_ticket_service
@@ -25,6 +25,9 @@ def create_ticket(
     # Declaring this dependency is what makes the endpoint non-public. It runs
     # before the body, so an anonymous caller never reaches the code below.
     current_user: User = Depends(get_current_user),
+    # Submitting a ticket runs the classifier, so it spends the same budget as
+    # POST /classify. Otherwise the limit on one would be escaped via the other.
+    _: None = Depends(limit_inference),
     service: TicketService = Depends(get_ticket_service),
 ) -> TicketResponse:
     try:

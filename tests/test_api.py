@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.main import create_app
+from tests.conftest import _register_and_login
 
 
 def test_health_reports_model_loaded(client):
@@ -18,8 +19,19 @@ def test_health_reports_model_loaded(client):
     assert body["model_version"] == "v0.1.0"
 
 
-def test_classify_returns_label_and_confidence(client):
-    response = client.post(
+# /classify requires a token from v5, so these tests use the authenticated
+# tickets_client. The session-wide `client` stays anonymous and now only checks
+# health - and that /classify refuses it.
+
+
+def test_classify_requires_a_token(client):
+    response = client.post("/classify", json={"text": "I was charged twice"})
+
+    assert response.status_code == 401
+
+
+def test_classify_returns_label_and_confidence(tickets_client):
+    response = tickets_client.post(
         "/classify", json={"text": "I was charged twice for my subscription"}
     )
 
@@ -42,14 +54,14 @@ def test_classify_returns_label_and_confidence(client):
         {"text": 123},         # wrong type
     ],
 )
-def test_classify_rejects_invalid_input(client, payload):
-    response = client.post("/classify", json=payload)
+def test_classify_rejects_invalid_input(tickets_client, payload):
+    response = tickets_client.post("/classify", json=payload)
 
     # 422 = "unprocessable": the request was understood but its content is invalid.
     assert response.status_code == 422
 
 
-def test_classify_returns_503_when_model_missing():
+def test_classify_returns_503_when_model_missing(clean_database):
     # A separate app with a broken path, so the shared client is not affected.
     broken_app = create_app(Settings(classifier_path="models/does_not_exist.joblib"))
 
@@ -58,19 +70,22 @@ def test_classify_returns_503_when_model_missing():
         assert health["model_loaded"] is False
         assert health["model_version"] is None
 
+        # Login does not need the model, so a user can still get a token.
+        token = _register_and_login(broken_client, "Acme", "user@acme.example")
+        broken_client.headers.update({"Authorization": f"Bearer {token}"})
         response = broken_client.post("/classify", json={"text": "I cannot log in"})
         assert response.status_code == 503
         assert response.json()["detail"] == "Model is not loaded"
 
 
-def test_classify_returns_500_when_prediction_crashes(client, monkeypatch):
+def test_classify_returns_500_when_prediction_crashes(tickets_client, monkeypatch):
     def explode(text):
         raise RuntimeError("simulated model failure")
 
-    # client.app is the app instance behind the shared client.
-    monkeypatch.setattr(client.app.state.classifier, "predict", explode)
+    # tickets_client.app is the app instance behind the client.
+    monkeypatch.setattr(tickets_client.app.state.classifier, "predict", explode)
 
-    response = client.post("/classify", json={"text": "The app crashes on upload"})
+    response = tickets_client.post("/classify", json={"text": "The app crashes on upload"})
 
     assert response.status_code == 500
     # The client gets a generic message; the real error goes to the log only.

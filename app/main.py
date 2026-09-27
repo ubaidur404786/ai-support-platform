@@ -10,6 +10,7 @@ from app.classification.classifier import TicketClassifier
 from app.classification.router import router as classification_router
 from app.core.config import Settings, settings
 from app.core.logging import configure_logging
+from app.core.rate_limit import RateLimiter, per_minute
 from app.health.router import router as health_router
 
 from app.tickets.router import router as tickets_router
@@ -40,6 +41,16 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         version=app_settings.app_version,
         lifespan=lifespan,
     )
+    # Built here, not at import time, so every app instance starts with empty
+    # buckets. Tests rely on that: each one gets a fresh app and a fresh budget.
+    rate_limiters: dict[str, RateLimiter] = {}
+    if app_settings.rate_limit_enabled:
+        rate_limiters["auth"] = per_minute(app_settings.auth_rate_limit_per_minute)
+        rate_limiters["inference"] = per_minute(
+            app_settings.inference_rate_limit_per_minute
+        )
+    app.state.rate_limiters = rate_limiters
+
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(classification_router)

@@ -1,6 +1,6 @@
 """Wiring for the auth module."""
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 # HTTPBearer reads the "Authorization: Bearer <token>" header and adds a token
 # box to the generated /docs page.
@@ -13,6 +13,7 @@ from app.auth.security import InvalidTokenError, read_access_token
 from app.auth.service import AuthService
 from app.core.database import get_session
 from app.core.errors import StorageError
+from app.core.rate_limit import enforce
 
 
 def get_user_repository(session: Session = Depends(get_session)) -> UserRepository:
@@ -75,3 +76,35 @@ def get_current_user(
         raise _unauthorized("Invalid or expired token")
 
     return user
+
+
+def limit_auth_attempts(request: Request) -> None:
+    """Budget for /auth/login and /auth/register, per client address.
+
+    Keyed on the address because the caller has no identity yet - that is what
+    they are trying to obtain. Runs before the handler, so a refused attempt
+    never reaches bcrypt: a 429 costs microseconds, a login ~680 ms.
+
+    request.client.host is the address of whoever opened the TCP connection.
+    Behind a reverse proxy that would be the proxy, and every user would share
+    one bucket; the fix then is to trust the proxy's X-Forwarded-For header, and
+    only the proxy's. There is no proxy yet, so the header is deliberately
+    ignored - trusting it now would let any caller claim a new address per
+    request and escape the limit entirely.
+    """
+    address = request.client.host if request.client else "unknown"
+    enforce(request, "auth", address)
+
+
+def limit_inference(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Budget for model inference, per user.
+
+    Keyed on the user, not the address: a user cannot escape it by changing
+    networks, and colleagues behind one office NAT do not share a budget.
+    Declaring get_current_user here does not authenticate twice - FastAPI runs a
+    dependency once per request and reuses the result.
+    """
+    enforce(request, "inference", f"user:{current_user.id}")

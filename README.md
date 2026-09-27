@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v4 — Authentication and tenant isolation** (branch `v4-authentication`)
+**Current version: v5 — Per-caller rate limits** (branch `v5-rate-limiting`)
 
 ## 1. Project Overview
 
@@ -15,7 +15,7 @@ controlled actions such as creating or updating tickets.
 The engineering goal is a production-style AI system whose every component can be justified:
 what problem forced it in, what it costs, and what happens when it fails. The architecture
 history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
-`v3-pagination`, `v4-authentication`, ...)
+`v3-pagination`, `v4-authentication`, `v5-rate-limiting`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -35,26 +35,28 @@ a human steps in where the model is unsure rather than everywhere.
 | Durable, queryable ticket history shared across processes | Available | v2 |
 | Paged, bounded ticket listing with filters | Available | v3 |
 | Per-organisation isolation of every ticket, enforced in SQL | Available | v4 |
+| Per-caller limits on model inference and login attempts (429 + `Retry-After`) | Available | v5 |
 | Knowledge base search and retrieval-augmented answers | Planned | — |
 | Controlled actions (create / update tickets) with human approval | Planned | — |
 | Model evaluation, monitoring, and safe rollout | Planned | — |
 
 ## 4. Current Architecture
 
-![v4 architecture](docs/architecture/v4.svg)
+![v5 architecture](docs/architecture/v5.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
-a bearer token, and every ticket belongs to exactly one organisation. No cache, queue, or
-external service yet.
+a bearer token, and every ticket belongs to exactly one organisation. Every expensive endpoint
+has a per-caller budget — a token bucket held in process memory, checked before the expensive
+work runs. No cache, queue, or external service yet.
 
 ```
 app/
 ├── main.py          create_app(): lifespan, wiring, router registration
-├── core/            settings, logging, database engine/session, shared errors
+├── core/            settings, logging, database engine/session, shared errors, rate_limit.py
 ├── health/          GET /health  (model + database status)
-├── auth/            POST /auth/register, POST /auth/login, get_current_user
-├── classification/  the model + POST /classify   (still public — see §15)
+├── auth/            POST /auth/register, POST /auth/login, get_current_user, the limit dependencies
+├── classification/  the model + POST /classify   (requires a token since v5)
 └── tickets/         POST/GET /tickets  (router → service → repository → PostgreSQL)
 ```
 
@@ -66,14 +68,16 @@ app/
    and expiry, loads the `users` row, and checks `is_active`. No header → **401**; anything wrong
    with the token → **401** with the same message. Being a dependency, this runs *before* the
    handler body, so an anonymous caller never reaches endpoint code.
-2. Pydantic validates the body: required, 3–5000 characters, not blank. Invalid → 422.
-3. FastAPI resolves dependencies: database session → repository → `TicketService`, plus the
+2. `limit_inference` takes one token from the caller's inference bucket, keyed on the user id and
+   shared with `POST /classify`. Empty → **429** with `Retry-After`, before the model runs.
+3. Pydantic validates the body: required, 3–5000 characters, not blank. Invalid → 422.
+4. FastAPI resolves dependencies: database session → repository → `TicketService`, plus the
    classifier. If the model is not loaded, `get_classifier` raises 503 before any logic runs.
-4. `TicketService.submit` receives `current_user.organization_id` — from the token, never from
+5. `TicketService.submit` receives `current_user.organization_id` — from the token, never from
    the request body — classifies the text, compares the confidence against
    `LOW_CONFIDENCE_THRESHOLD`, builds a `Ticket`, and hands it to the repository.
-5. The repository inserts the row and commits. PostgreSQL assigns the id from a sequence.
-6. Response: 201 with `{id, text, label, confidence, model_version, needs_review, created_at}`.
+6. The repository inserts the row and commits. PostgreSQL assigns the id from a sequence.
+7. Response: 201 with `{id, text, label, confidence, model_version, needs_review, created_at}`.
 
 Failure paths: a database error is rolled back and re-raised as `StorageError`, which the
 router turns into **503** — the request was valid and can be retried. Any other unexpected
@@ -86,7 +90,10 @@ organisation, because across a tenant boundary existence is itself information
 `WHERE organization_id = …` that is not optional. An oversized `limit` is rejected
 with 422 before the handler runs, and the service clamps it again for callers that do not
 arrive over HTTP ([ADR-011](docs/adr/ADR-011-bounded-work-per-request.md)). `POST /classify`
-classifies without storing.
+classifies without storing; it needs a token and spends the same inference budget as
+`POST /tickets`. `POST /auth/login` and `/auth/register` spend an "auth" budget keyed on the
+client address — there is no user yet — so a refused attempt never reaches bcrypt
+([ADR-016](docs/adr/ADR-016-in-process-token-bucket.md), [ADR-017](docs/adr/ADR-017-rate-limit-keys.md)).
 `GET /health` reports `model_loaded`, `model_version`, and `database_reachable`, and downgrades
 `status` to `degraded` when either is unavailable.
 
@@ -141,6 +148,7 @@ the model file and its metrics are produced at training time.
 | Schema | Alembic | Versioned migrations; also builds the test database |
 | Paging | Offset pagination (`LIMIT`/`OFFSET`) | Bounded responses; see [ADR-010](docs/adr/ADR-010-offset-pagination.md) |
 | Authentication | `bcrypt`, `PyJWT`, `email-validator` | Signed bearer tokens and slow salted hashing; see [ADR-012](docs/adr/ADR-012-bearer-tokens.md) and [ADR-014](docs/adr/ADR-014-bcrypt-password-storage.md) |
+| Rate limiting | Token bucket in `app/core/rate_limit.py` — no library, no Redis | One process needs no shared store; 2 µs per check; see [ADR-016](docs/adr/ADR-016-in-process-token-bucket.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
 
@@ -149,10 +157,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v4 — Authentication and tenant isolation.** See
-[docs/versions/v4-authentication.md](docs/versions/v4-authentication.md) for the full problem /
+**v5 — Per-caller rate limits.** See
+[docs/versions/v5-rate-limiting.md](docs/versions/v5-rate-limiting.md) for the full problem /
 solution / trade-off / measurement write-up, and
-[docs/versions/v4-authentication/README.md](docs/versions/v4-authentication/README.md) for a
+[docs/versions/v5-rate-limiting/README.md](docs/versions/v5-rate-limiting/README.md) for a
 short guide.
 
 ## 10. Version Evolution
@@ -164,7 +172,8 @@ short guide.
 | v2 | `v2-postgresql` | State lives inside the process: data is lost on restart, cannot be shared between replicas, and blocks running more workers | Complete |
 | v3 | `v3-pagination` | `GET /tickets` had no paging: 13,000 rows took 2.18 s and returned everything, letting the caller choose the server's workload | Complete |
 | v4 | `v4-authentication` | Every request was anonymous: no row recorded who created it, and any client that could reach the port could read and write every ticket | Complete |
-| v5 | — | `POST /classify` is public and consumes CPU per call; `/auth/login` is a 682 ms unauthenticated request. Both need per-caller limits | Next |
+| v5 | `v5-rate-limiting` | One caller could spend unbounded CPU: `/auth/login` is ~0.7–0.9 s of bcrypt per anonymous attempt, and `/classify` was public. Pagination bounded work per request, not requests per caller | Complete |
+| v6 | — | The knowledge base does not exist yet: documents are the platform's purpose, and v4's ownership model was built for them | Candidate |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -173,11 +182,11 @@ authentication did not. Old branches remain on GitHub as engineering history.
 The whole chain in one picture — the problem that forced each version, what changed, and what was
 measured afterwards:
 
-![Architecture evolution, v0 to v4](docs/architecture/evolution.svg)
+![Architecture evolution, v0 to v5](docs/architecture/evolution.svg)
 
 Carried forward, measured but not yet fixed: `total` still costs more than the page it
 accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
-`POST /classify` is unauthenticated.
+rate-limit buckets live in one process, so every extra worker multiplies the limits.
 
 ## 11. How to Run
 
@@ -207,6 +216,7 @@ curl -X POST http://127.0.0.1:8000/auth/register -H "Content-Type: application/j
 TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/login -H "Content-Type: application/json" -d '{"email": "maya@acme.com", "password": "correct-horse-battery"}' | python -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
 curl -X POST http://127.0.0.1:8000/tickets -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"text": "I was charged twice for my subscription"}'
 curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/tickets?needs_review=true&limit=20"
+curl -X POST http://127.0.0.1:8000/classify -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"text": "I cannot log in"}'
 curl -i http://127.0.0.1:8000/tickets     # 401: no token
 ```
 
@@ -225,6 +235,9 @@ Configuration (environment variables or `.env`, see `.env.example`):
 | `JWT_SECRET_KEY` | **none — required** | Token signing key. The app refuses to start without it; generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `JWT_ALGORITHM` | `HS256` | Signing algorithm |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Token lifetime |
+| `RATE_LIMIT_ENABLED` | `true` | `false` switches every limit off — for measuring the "before" numbers only |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | `10` | Login + registration attempts per client address |
+| `INFERENCE_RATE_LIMIT_PER_MINUTE` | `60` | `/classify` + `POST /tickets` per user, one shared budget |
 | `LOG_LEVEL` | `INFO` | Python logging level |
 
 The Compose credentials are local development values only. Real deployments take them from the
@@ -242,7 +255,16 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-99 tests, about 103 seconds — roughly 60% of that is bcrypt doing its job (see §15):
+120 tests, about 165 seconds — most of it bcrypt doing its job (see §15):
+
+- **Rate limiting** — the token bucket tested with a fake clock (time moved by assignment, so the
+  tests are exact and instant): burst then refuse, exact `Retry-After`, refill, no saving up beyond
+  capacity, separate callers, bounded memory, and 50 threads racing for 10 tokens getting exactly
+  10. Through HTTP: login refused with 429 and `Retry-After`; **a refused login never calls
+  `authenticate`** (the limiter runs before bcrypt, proved rather than assumed); wrong passwords
+  and registrations spend the same budget; `/classify` and `POST /tickets` share one inference
+  budget and a refused ticket stores nothing; each user has their own budget; anonymous callers get
+  401, not 429.
 
 - **Authentication tests** — register, login, duplicate email (409), wrong password and unknown
   email (401, asserted to be *identical*), six invalid-input variants (422), and a test that the
@@ -299,6 +321,8 @@ results are flagged rather than trusted.
 - [ADR-013 — The organisation is the tenancy boundary, and its filter is a required argument](docs/adr/ADR-013-organisation-scoped-authorization.md)
 - [ADR-014 — bcrypt, used directly, for password storage](docs/adr/ADR-014-bcrypt-password-storage.md)
 - [ADR-015 — A read across a tenant boundary answers 404, not 403](docs/adr/ADR-015-cross-tenant-404.md)
+- [ADR-016 — In-process token bucket for rate limiting](docs/adr/ADR-016-in-process-token-bucket.md)
+- [ADR-017 — Rate-limit keys: client address for auth, user id for inference](docs/adr/ADR-017-rate-limit-keys.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -363,6 +387,27 @@ logs in (one verify), ~1.36 s, across roughly 45 tests. `45 × 1.36 ≈ 61 s`, a
 runtime. A hash fast enough to be free in tests is a hash fast enough to brute-force in
 production.
 
+**v5 — rate limits**, measured in one session with a Python `httpx` client, one client address,
+`DB_ECHO=false`, no `--reload`:
+
+| Scenario | Limits off | Limits on |
+|---|---|---|
+| 30 wrong logins, sequential | 29.06 s — 30 × 401, P50 891 ms | **10.54 s** — 11 × 401 (P50 893 ms), 19 × 429 (**P50 6.2 ms**) |
+| 100 `/classify`, one user, after 5 warm-up | 100 × 200, P50 24.8 ms | 57 × 200 (P50 21.7 ms), 43 × 429 (**P50 14.8 ms**) |
+| limiter `acquire()` alone | — | **2.07 µs** (3.12 µs with 100,000 keys; 14.2 MB for 100,000 buckets) |
+
+A refused login is ~140× cheaper than an allowed one because the address-keyed check needs no
+database; a refused `/classify` is only ~1.5× cheaper, because keying on the *user* means the
+token check and `users` lookup run first. That is the price of a key that cannot be escaped by
+changing network ([ADR-017](docs/adr/ADR-017-rate-limit-keys.md)).
+
+**The limit is per process, measured:** limit 5/min, 40 wrong logins from 8 threads — one worker
+allowed exactly **5**; `--workers 2` allowed **8**. Each worker holds its own buckets. This is the
+recorded trigger for moving buckets into Redis ([ADR-016](docs/adr/ADR-016-in-process-token-bucket.md)).
+
+The same experiment re-taught standing rule 2: creating a new `httpx` client per request made 40
+requests take 47.30 s; over one shared client they took 1.46 s.
+
 Listing, with 13,000 rows in the table (client-measured, includes client JSON parsing):
 
 | Version | Request | Rows returned | Time |
@@ -389,15 +434,11 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
 
 **Known limitations:**
 
-1. *`POST /classify` is public and consumes CPU per call.* It stores nothing and owns no data, so
-   there is no tenant boundary to cross — but inference is 1.68 ms of CPU against a throughput
-   ceiling near 80 req/s, so an anonymous caller can consume all of it. This is the same
-   *category* of problem v3 fixed for `GET /tickets`, with compute instead of rows. Trigger: the
-   moment this runs anywhere other than localhost.
-2. *`/auth/login` is a 682 ms unauthenticated request.* Correct for password security, and a
-   denial-of-service surface created by v4: one anonymous request buys 682 ms of CPU. Needs
-   per-caller rate limiting, which [ADR-011](docs/adr/ADR-011-bounded-work-per-request.md)
-   already noted pagination does not provide.
+1. *Rate limits are per process.* Measured: with two workers a limit of 5 let 8 attempts through.
+   Any second worker or replica multiplies every limit. Trigger for a shared store (Redis).
+2. *Per-address limits do not stop a distributed attack on login.* 1,000 addresses × 10 attempts a
+   minute is still 10,000 bcrypt calls. Needs a global cap on concurrent bcrypt work; a per-email
+   limit would help against targeted guessing but lets an attacker lock a victim out.
 3. *No token revocation.* A signed token cannot be un-signed. Disabling a user works immediately,
    because the user row is loaded per request, but a token stolen from an active account works
    until it expires — up to 60 minutes.
@@ -411,14 +452,15 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
    `BrokenRepository` double broke in **both** v3 and v4 for the same structural reason: N
    implementations means N manual edits with no compiler help. mypy or Pyright would have caught
    all of them.
-7. *The test suite takes 103 seconds*, which is approaching the point where it stops being run
+7. *The test suite takes 165 seconds* (103 s in v4; v5 made eleven `/classify` tests register a
+   user), which is approaching the point where it stops being run
    often enough to be useful. Both standard fixes cost something real: a lower bcrypt cost factor
    in tests means no longer testing the production configuration, and session-scoping the
    registration means tests share a user.
-8. *Multi-worker scaling is unverified on this machine.* Four workers gave no gain over one
-   (44.8 vs 44.5 req/s), and PostgreSQL showed only one worker's pool in use during the run —
-   consistent with Windows lacking `SO_REUSEPORT`, but not proven. No horizontal-scaling claim is
-   made from these numbers.
+8. *Multi-worker throughput is unverified on this machine.* Four workers gave no gain over one
+   (44.8 vs 44.5 req/s) in v2. v5 did show that two workers **both serve requests** on Windows —
+   a limit of 5 letting 8 through is only possible if two processes answered — but no throughput
+   claim is made from that.
 9. *Serial inference per process.* Carried over from v0. The database's I/O wait masks it
    slightly; a heavier model would expose it immediately.
 10. *An open index question.* `needs_review` is not indexed, on the assumption that roughly half
@@ -428,6 +470,10 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
 11. *No per-user visibility and no audit trail.* Every member of an organisation sees everything
     it owns, and `needs_review` records that something needs looking at but not who looked.
 12. *No password reset, logout, refresh or rotation.* All real, all deferred.
+13. *Reads are not rate limited.* `GET /tickets` is bounded per request (v3) but not per caller.
+    No measurement asks for it yet.
+14. *Behind a reverse proxy, every caller would share the proxy's address* and therefore one auth
+    budget. `X-Forwarded-For` is deliberately ignored until a proxy we control sets it.
 
 Theoretical scaling beyond this machine is discussed per version in `docs/versions/`; none of
 it has been measured.
