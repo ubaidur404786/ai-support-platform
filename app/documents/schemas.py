@@ -44,10 +44,13 @@ class SearchResult(BaseModel):
     # Which passage of the document: the citation a later RAG answer will give.
     chunk_index: int
     text: str
-    # Keyword-overlap score. Comparable within one query's results only.
+    # mode=keyword: keyword-overlap score. mode=semantic: cosine similarity
+    # between the question and the chunk (1.0 = same meaning). Either way,
+    # comparable within one query's results only.
     rank: float
 
 
 class SearchResponse(BaseModel):
     query: str
+    mode: str
     results: list[SearchResult]

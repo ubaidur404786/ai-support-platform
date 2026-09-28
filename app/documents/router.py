@@ -10,6 +10,7 @@ from app.auth.models import User
 from app.core.config import settings
 from app.core.errors import AlreadyExistsError, StorageError
 from app.documents.dependencies import get_document_service
+from app.documents.embeddings import EmbeddingUnavailable
 from app.documents.extraction import DocumentTooLarge, UnsupportedDocumentType
 from app.documents.schemas import (
     DocumentListResponse,
@@ -117,17 +118,31 @@ def search_documents(
     # "any" ranks chunks by how many of the words they contain; "all" requires
     # every word. Exposed so the evaluation can compare the two.
     match: Literal["any", "all"] = Query(default="any"),
+    # "keyword" finds shared words; "semantic" finds similar meaning (v8).
+    # keyword stays the default so existing clients see no change; the
+    # evaluation (scripts/evaluate_retrieval.py) compares the two.
+    mode: Literal["keyword", "semantic"] = Query(default="keyword"),
     current_user: User = Depends(get_current_user),
     service: DocumentService = Depends(get_document_service),
 ) -> SearchResponse:
     try:
-        hits = service.search(current_user.organization_id, q, limit=limit, match=match)
+        hits = service.search(
+            current_user.organization_id, q, limit=limit, match=match, mode=mode
+        )
     except EmptySearchQuery as error:
         raise HTTPException(status_code=422, detail=str(error))
+    except EmbeddingUnavailable:
+        # Only semantic search needs the model. Keyword search keeps working,
+        # so the caller can fall back to it.
+        logger.exception("Embedding model unavailable")
+        raise HTTPException(
+            status_code=503, detail="Semantic search is unavailable; try mode=keyword"
+        )
     except StorageError:
         raise _storage_unavailable()
     return SearchResponse(
         query=q,
+        mode=mode,
         results=[SearchResult(**hit.__dict__) for hit in hits],
     )
 

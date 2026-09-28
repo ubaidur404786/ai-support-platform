@@ -3,7 +3,7 @@
 An upload request stores the file and marks the document QUEUED. From there:
 
     claim_next_document   QUEUED -> PROCESSING   (one worker, one document)
-    process_document      read the file -> extract text -> chunk -> save
+    process_document      read the file -> extract text -> chunk -> embed -> save
                           PROCESSING -> READY    (or FAILED, with a reason)
 
 The queue is simply the documents table: "the next job" is the oldest document
@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, settings
 from app.documents.chunking import chunk_text
+from app.documents.embeddings import embed_texts, to_bytes
 from app.documents.extraction import (
     DocumentTooLarge,
     UnreadableDocument,
@@ -104,6 +105,45 @@ def _finish(session: Session, document: Document, status: str, error: str | None
     session.commit()
 
 
+# Chunks embedded between two heartbeats. Small enough that a batch takes well
+# under WORKER_STALE_AFTER_SECONDS even on a slow CPU (~50 s at 5 chunks/s).
+EMBED_BATCH_SIZE = 256
+
+
+def _heartbeat(session: Session, document_id: int, attempt: int) -> None:
+    """Tell the database "this worker is still working on the document".
+
+    requeue_stale_documents treats a document PROCESSING for longer than
+    worker_stale_after_seconds as abandoned. Embedding a large document takes
+    longer than that (measured in v8: ~7.5 minutes for a 300-page PDF on the
+    development laptop), so without this a second worker would take it over
+    while the first was still busy - again and again, until it FAILED.
+    """
+    session.execute(
+        update(Document)
+        # Only while it is still ours: not if deleted or taken over.
+        .where(
+            Document.id == document_id,
+            Document.status == PROCESSING,
+            Document.attempts == attempt,
+        )
+        .values(processing_started_at=_now())
+    )
+    session.commit()
+
+
+def _embed_with_heartbeat(
+    session: Session, document_id: int, attempt: int, texts: list[str], app_settings: Settings
+) -> list:
+    """Embed the texts in batches, sending a heartbeat after each batch."""
+    vectors = []
+    for start in range(0, len(texts), EMBED_BATCH_SIZE):
+        batch = texts[start : start + EMBED_BATCH_SIZE]
+        vectors.extend(embed_texts(batch, app_settings.embedding_model))
+        _heartbeat(session, document_id, attempt)
+    return vectors
+
+
 def process_document(
     session: Session, document: Document, app_settings: Settings = settings
 ) -> None:
@@ -137,6 +177,14 @@ def process_document(
         logger.info("Document %s failed: %s", document_id, error)
         return
 
+    # One embedding per chunk (v8). If the model is unavailable this raises, and
+    # process_next_document treats it like any unexpected error: back in the
+    # queue, up to worker_max_attempts. The file itself is fine, so it is not
+    # failed at once like a broken PDF.
+    vectors = _embed_with_heartbeat(
+        session, document_id, attempt, [chunk.text for chunk in chunks], app_settings
+    )
+
     # --- Save everything in ONE transaction: text, chunks, status. ---
     current = _lock_if_still_ours(session, document_id, attempt)
     if current is None:
@@ -147,6 +195,7 @@ def process_document(
     current.content = extracted.text
     current.page_count = extracted.page_count
     current.chunk_count = len(chunks)
+    current.embedding_model = app_settings.embedding_model
     session.add_all(
         DocumentChunk(
             document_id=document_id,
@@ -155,8 +204,10 @@ def process_document(
             text=chunk.text,
             start_char=chunk.start,
             end_char=chunk.end,
+            embedding=to_bytes(vector),
         )
-        for chunk in chunks
+        # zip pairs each chunk with its vector: same order, same length.
+        for chunk, vector in zip(chunks, vectors)
     )
     # _finish commits: the chunks and the READY status become visible together.
     # A search can never see half a document's chunks.
@@ -194,8 +245,8 @@ def requeue_stale_documents(session: Session, app_settings: Settings = settings)
 
     A worker that crashes (or is stopped with Ctrl+C) mid-document leaves it
     PROCESSING forever - nothing else would ever pick it up. Anything PROCESSING
-    for longer than worker_stale_after_seconds is treated as abandoned: back to
-    QUEUED, or FAILED if it has already used all its attempts.
+    with no heartbeat for longer than worker_stale_after_seconds is treated as
+    abandoned: back to QUEUED, or FAILED if it has already used all its attempts.
     """
     cutoff = _now() - timedelta(seconds=app_settings.worker_stale_after_seconds)
     abandoned = (Document.status == PROCESSING) & (Document.processing_started_at < cutoff)
@@ -219,3 +270,26 @@ def requeue_stale_documents(session: Session, app_settings: Settings = settings)
     if failed or requeued:
         logger.warning("Abandoned documents: %s requeued, %s failed", requeued, failed)
     return requeued + failed
+
+
+def embed_existing_document(session: Session, document: Document, app_settings: Settings = settings) -> int:
+    """Give an already-processed document embeddings for all its chunks.
+
+    For documents processed before v8 (embedding_model is NULL), or by an older
+    model. Used by scripts/embed_existing_documents.py. Returns the number of
+    chunks embedded. Commits once, so a document is either fully embedded with
+    the new model or left exactly as it was.
+    """
+    chunks = list(
+        session.scalars(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == document.id)
+            .order_by(DocumentChunk.chunk_index)
+        )
+    )
+    vectors = embed_texts([chunk.text for chunk in chunks], app_settings.embedding_model)
+    for chunk, vector in zip(chunks, vectors):
+        chunk.embedding = to_bytes(vector)
+    document.embedding_model = app_settings.embedding_model
+    session.commit()
+    return len(chunks)

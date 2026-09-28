@@ -24,4 +24,5 @@ def get_document_service(
         max_pending_documents=settings.max_pending_documents_per_organization,
         max_page_size=settings.max_page_size,
         max_search_results=settings.max_search_results,
+        embedding_model=settings.embedding_model,
     )

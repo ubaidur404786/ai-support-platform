@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+import numpy as np
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -46,6 +47,10 @@ class DocumentRepository(Protocol):
 
     def search(
         self, organization_id: int, words: list[str], limit: int, match: Match = "any"
+    ) -> list[SearchHit]: ...
+
+    def semantic_search(
+        self, organization_id: int, query_vector: np.ndarray, model_name: str, limit: int
     ) -> list[SearchHit]: ...
 
 
@@ -214,3 +219,71 @@ class PostgresDocumentRepository:
                 )
                 for row in self._session.execute(statement)
             ]
+
+    def semantic_search(
+        self, organization_id: int, query_vector: np.ndarray, model_name: str, limit: int
+    ) -> list[SearchHit]:
+        """The chunks whose meaning is closest to the question's.
+
+        Brute force, on purpose: read the embedding of EVERY chunk of the
+        organisation, compare each one with the question, keep the best. Exact,
+        and simple enough to check by hand - but its cost grows with the number
+        of chunks, not with `limit`. Measured in v8: fine for a knowledge base of
+        hundreds of chunks, ~10 s at 50,000 - almost all of it spent reading
+        77 MB of vectors out of PostgreSQL, not on the maths. An index built for
+        vectors (pgvector) is the fix (see ADR-024).
+        """
+        with translated_errors(self._session):
+            rows = self._session.execute(
+                select(DocumentChunk.id, DocumentChunk.embedding)
+                .join(Document, Document.id == DocumentChunk.document_id)
+                # The tenant filter, on the chunk itself - as in keyword search.
+                .where(DocumentChunk.organization_id == organization_id)
+                # Only vectors made by the model that embedded the question.
+                .where(Document.embedding_model == model_name)
+                .where(DocumentChunk.embedding.is_not(None))
+                .order_by(DocumentChunk.id)
+            ).all()
+        if not rows:
+            return []
+
+        chunk_ids = [row.id for row in rows]
+        # All vectors side by side: one row per chunk, 384 columns.
+        matrix = np.frombuffer(b"".join(row.embedding for row in rows), dtype=np.float32)
+        matrix = matrix.reshape(len(rows), -1)
+        # Every vector has length 1, so each dot product is a cosine similarity.
+        # One matrix-vector product scores every chunk at once.
+        scores = matrix @ query_vector
+        # Highest score first. "stable" keeps chunk-id order for equal scores.
+        best = np.argsort(-scores, kind="stable")[:limit]
+
+        # Second query: text and title for the few winners only, instead of
+        # reading the text of every chunk just to throw most of it away.
+        top_ids = [chunk_ids[i] for i in best]
+        with translated_errors(self._session):
+            details = {
+                row.id: row
+                for row in self._session.execute(
+                    select(
+                        DocumentChunk.id,
+                        DocumentChunk.document_id,
+                        Document.title,
+                        DocumentChunk.chunk_index,
+                        DocumentChunk.text,
+                    )
+                    .join(Document, Document.id == DocumentChunk.document_id)
+                    .where(DocumentChunk.id.in_(top_ids))
+                )
+            }
+        return [
+            SearchHit(
+                document_id=details[chunk_ids[i]].document_id,
+                document_title=details[chunk_ids[i]].title,
+                chunk_index=details[chunk_ids[i]].chunk_index,
+                text=details[chunk_ids[i]].text,
+                rank=float(scores[i]),
+            )
+            for i in best
+            # A chunk deleted between the two queries is simply left out.
+            if chunk_ids[i] in details
+        ]

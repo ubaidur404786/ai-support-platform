@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1326" viewBox="0 0 1180 1326" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1428" viewBox="0 0 1180 1428" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
   <defs>
     <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
       <path d="M0,0 L8,4 L0,8 z" fill="#444"/>
     </marker>
   </defs>
 
-  <rect width="1180" height="1326" fill="#ffffff"/>
+  <rect width="1180" height="1428" fill="#ffffff"/>
 
-  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v7</text>
+  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v8</text>
   <text x="30" y="58" fill="#555">Each version exists because the previous one produced a measured limitation. Red = the problem. Blue = the change. Grey = what was measured.</text>
 
   <!-- ============ SECTION A: how the request path changed ============ -->
@@ -256,10 +256,31 @@
   <text x="896" y="1170" font-size="11" fill="#222">ready time unchanged (same work)</text>
   <text x="896" y="1192" font-size="10" fill="#777">196 tests. Laptop on battery.</text>
 
+  <!-- row v8 -->
+  <rect x="30" y="1216" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="1259" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v8</text>
+  <text x="85" y="1275" text-anchor="middle" font-size="10" fill="#666">embeddings</text>
+  <rect x="146" y="1216" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="1236" font-size="11" fill="#333">Keyword search matches words, not meaning:</text>
+  <text x="158" y="1252" font-size="11" fill="#333">"Can I get my money back?" finds nothing about refunds.</text>
+  <text x="158" y="1268" font-size="11" fill="#333">Paraphrase hit@3 0.47, 20% of paraphrases empty.</text>
+  <text x="158" y="1290" font-size="11" fill="#c62828">Problem: retrieval quality, measured on 30 questions.</text>
+  <rect x="526" y="1216" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="1236" font-size="11" fill="#333">Worker embeds every chunk (all-MiniLM-L6-v2, fastembed,</text>
+  <text x="538" y="1252" font-size="11" fill="#333">CPU); search?mode=semantic = cosine similarity, brute force</text>
+  <text x="538" y="1268" font-size="11" fill="#333">in NumPy. embedding_model recorded per document.</text>
+  <text x="538" y="1290" font-size="10" fill="#777">Unplanned: PyTorch stack replaced (same vectors, 90–150 → 21–25 s</text>
+  <text x="538" y="1302" font-size="10" fill="#777">import); heartbeat, because a PDF outlived the 5-min timeout.</text>
+  <rect x="884" y="1216" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="1236" font-size="11" fill="#222">hit@3: 0.73 → 0.93 (paraphrase 0.47 → 0.87)</text>
+  <text x="896" y="1254" font-size="11" fill="#222">empty: 10% → 0%</text>
+  <text x="896" y="1272" font-size="11" fill="#222">semantic P50: 627 ms (20) → 10.5 s (50k)</text>
+  <text x="896" y="1294" font-size="10" fill="#777">300-page PDF ready ~7.5 min. 207 tests.</text>
+
   <!-- next -->
-  <rect x="30" y="1228" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
-  <text x="44" y="1250" font-size="12" font-weight="bold" fill="#222">Open after v7 — what the next versions must answer</text>
-  <text x="44" y="1270" font-size="11.5" fill="#333">1. Keyword search misses meaning: paraphrase hit@3 0.47, 20% empty → embeddings (v8), computed by the worker, measured on the same 30 questions.</text>
-  <text x="44" y="1286" font-size="11.5" fill="#333">2. Nobody notices a stopped worker or a growing queue.   3. Rate-limit buckets are per process.   4. Search cost grows with matching chunks.</text>
-  <text x="44" y="1302" font-size="11.5" fill="#333">5. Originals not kept after processing.   6. No token revocation, no type checker.   7. Test suite runtime keeps growing.</text>
+  <rect x="30" y="1330" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
+  <text x="44" y="1352" font-size="12" font-weight="bold" fill="#222">Open after v8 — what the next versions must answer</text>
+  <text x="44" y="1372" font-size="11.5" fill="#333">1. Semantic search reads every vector per question: 10.5 s at 50k chunks, the maths only 36 ms → pgvector + HNSW (v9), measured for latency AND recall.</text>
+  <text x="44" y="1388" font-size="11.5" fill="#333">2. Embedding at 1–10 chunks/s limits ingestion.   3. No relevance threshold before RAG.   4. Nothing alerts on a stopped worker.</text>
+  <text x="44" y="1404" font-size="11.5" fill="#333">5. Rate-limit buckets are per process.   6. No token revocation, no type checker.   7. Test suite runtime keeps growing.</text>
 </svg>

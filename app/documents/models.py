@@ -90,8 +90,10 @@ class Document(Base):
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # How many times a worker has started on this document. Limits retries.
     attempts: Mapped[int] = mapped_column(Integer, default=0)
-    # When a worker last started on it - how a document abandoned by a crashed
-    # worker is recognised: still PROCESSING, started long ago.
+    # When the worker last showed it was alive: set when it starts on the
+    # document, and since v8 refreshed after every batch of embeddings (a
+    # heartbeat). A document abandoned by a crashed worker is recognised by it:
+    # still PROCESSING, no sign of life for a long time.
     processing_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -99,6 +101,14 @@ class Document(Base):
     processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # --- Embeddings (v8) -----------------------------------------------------------
+    # Which model produced this document's chunk embeddings, e.g.
+    # "sentence-transformers/all-MiniLM-L6-v2". Embeddings from two different
+    # models live in different spaces and must never be compared, so semantic
+    # search only uses documents embedded by the model it is using now. NULL =
+    # not embedded yet (documents from before v8, until the backfill script runs).
+    embedding_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -170,6 +180,11 @@ class DocumentChunk(Base):
     search_vector: Mapped[str] = mapped_column(
         TSVECTOR, Computed("to_tsvector('english', text)", persisted=True)
     )
+
+    # The chunk's meaning as 384 numbers, packed into bytes (see embeddings.py).
+    # Written by the worker together with the chunk. NULL only for chunks
+    # created before v8 and not yet backfilled.
+    embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
     __table_args__ = (
         # GIN ("generalised inverted index") maps each word to the rows that

@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v7 — Background processing for document ingestion** (branch `v7-async-processing`)
+**Current version: v8 — Embeddings: search by meaning** (branch `v8-embeddings`)
 
 ## 1. Project Overview
 
@@ -16,7 +16,7 @@ The engineering goal is a production-style AI system whose every component can b
 what problem forced it in, what it costs, and what happens when it fails. The architecture
 history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
 `v3-pagination`, `v4-authentication`, `v5-rate-limiting`, `v6-document-ingestion`,
-`v7-async-processing`, ...)
+`v7-async-processing`, `v8-embeddings`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -40,13 +40,14 @@ a human steps in where the model is unsure rather than everywhere.
 | Knowledge-base documents (.txt / .md / .pdf) extracted, chunked and stored per organisation | Available | v6 |
 | Keyword search over document chunks, with a measured retrieval baseline | Available | v6 |
 | Documents processed in a background worker; uploads answer 202 and report `queued / processing / ready / failed` | Available | v7 |
-| Meaning-based (embedding) search and retrieval-augmented answers | Planned | — |
+| Meaning-based search: every chunk embedded locally (all-MiniLM-L6-v2), `mode=semantic`; paraphrase hit@3 0.47 → 0.87 | Available | v8 |
+| Retrieval-augmented answers, with a relevance threshold | Planned | — |
 | Controlled actions (create / update tickets) with human approval | Planned | — |
 | Model evaluation, monitoring, and safe rollout | Planned | — |
 
 ## 4. Current Architecture
 
-![v7 architecture](docs/architecture/v7.svg)
+![v8 architecture](docs/architecture/v8.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
@@ -55,7 +56,9 @@ has a per-caller budget — a token bucket held in process memory, checked befor
 work runs. Knowledge-base documents are split into overlapping chunks and stored in PostgreSQL
 with a full-text index. Since v7 that processing happens in a separate **worker process**
 (`python -m app.worker`): the upload only stores the file and answers 202, and PostgreSQL itself
-is the job queue. No cache, broker or external service yet.
+is the job queue. Since v8 the worker also turns every chunk into an **embedding** (384 numbers
+from a small local model run by ONNX Runtime), and search can compare meaning instead of words
+(`mode=semantic`). No cache, broker or external service yet.
 
 ```
 app/
@@ -68,8 +71,9 @@ app/
 ├── tickets/         POST/GET /tickets  (router → service → repository → PostgreSQL)
 ├── documents/       POST/GET/DELETE /documents, GET /documents/search
 │                    upload: service → repository (document + file, status "queued")
-│                    processing.py: claim → extraction.py → chunking.py → "ready" / "failed"
-└── worker.py        python -m app.worker — the loop that runs processing.py
+│                    processing.py: claim → extraction.py → chunking.py → embeddings.py → "ready" / "failed"
+│                    embeddings.py: the local embedding model (text → 384 numbers)
+└── worker.py        python -m app.worker — loads the model, then runs processing.py in a loop
 ```
 
 ## 5. Request Flow
@@ -127,24 +131,31 @@ The worker (`python -m app.worker`, [ADR-021](docs/adr/ADR-021-postgres-table-as
    never take the same one.
 3. Extracts text (pypdf for PDFs; page limit, NUL removal) and splits it into ≤ 800-character
    chunks with 100 characters of overlap. No transaction is open meanwhile.
-4. In **one transaction**, writes the chunks and the text, sets `ready`, and deletes the file.
+4. Embeds the chunks, 256 at a time, refreshing `processing_started_at` after each batch (a
+   heartbeat), so a document that takes minutes is not mistaken for an abandoned one.
+5. In **one transaction**, writes the chunks with their embeddings, the text and the
+   `embedding_model`, sets `ready`, and deletes the file.
    An unreadable file → `failed` with an `error_message`. An unexpected error → rollback and
    back to `queued`, up to 3 attempts.
 
 The client follows `GET /documents/{id}` until `status` is `ready` or `failed`. Only `ready`
 documents have chunks, so only they appear in search.
 
-`GET /documents/search?q=…` keeps only letters and digits from the query (so `to_tsquery` syntax
-can never pass through), then runs one SQL query: `WHERE organization_id = … AND search_vector @@
-'w1 | w2 | …' ORDER BY ts_rank(…) DESC LIMIT n` (n ≤ 20). Another organisation's documents are
-404 on read and delete, and absent from search.
+`GET /documents/search?q=…` (`mode=keyword`, the default) keeps only letters and digits from the
+query (so `to_tsquery` syntax can never pass through), then runs one SQL query: `WHERE
+organization_id = … AND search_vector @@ 'w1 | w2 | …' ORDER BY ts_rank(…) DESC LIMIT n` (n ≤ 20).
+With `mode=semantic`, the question is embedded in the API process (~141 ms), every embedding of
+the organisation made by the current model is read, all are scored with one NumPy matrix product
+(cosine similarity), and the text of the best `n` is fetched. If the model cannot run → **503**
+"try mode=keyword". Another organisation's documents are 404 on read and delete, and absent from
+both searches.
 
 `GET /health` reports `model_loaded`, `model_version`, and `database_reachable`, and downgrades
 `status` to `degraded` when either is unavailable.
 
 ## 6. AI Flow
 
-Offline (before the server starts):
+Classification, offline (before the server starts):
 
 ```
 ml/data/tickets.csv  →  ml/train.py  →  models/ticket_classifier.joblib + models/metrics.json
@@ -167,6 +178,21 @@ threshold keeps an uncertain guess from being acted on silently
 ([ADR-006](docs/adr/ADR-006-low-confidence-human-review.md)). Storing `model_version` alongside
 each prediction means a later model change can be evaluated against what the old one decided.
 
+Retrieval (v8):
+
+```
+ingest (worker):  chunk text → all-MiniLM-L6-v2 (fastembed, ONNX Runtime, CPU) → 384 float32, length 1
+                  → document_chunks.embedding (bytea) + documents.embedding_model
+search (API):     question → same model → 384 numbers → dot product with every chunk of the
+                  organisation (= cosine similarity) → top n
+```
+
+The model is downloaded once (~90 MB) into `models/embeddings` and runs offline after that
+([ADR-023](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md)). `embedding_model` plays
+the role `model_version` plays for tickets: vectors from different models are never compared.
+Semantic search always returns its closest chunks, even for questions nothing answers. A
+relevance threshold has to exist before retrieved text feeds generated answers.
+
 ## 7. Data Flow
 
 Tickets are written to the `tickets` table in PostgreSQL and survive process restarts. Any
@@ -180,7 +206,7 @@ organisation by the migration — intact, but owned by a tenant nobody logs into
 
 Documents are stored as one `documents` row (metadata, processing status, the full extracted
 text, a SHA-256 of the upload) plus N `document_chunks` rows (text, offsets, a generated
-`tsvector` with a GIN index). Chunks carry their own `organization_id` so the tenant filter never
+`tsvector` with a GIN index, and since v8 a 1,536-byte embedding). Chunks carry their own `organization_id` so the tenant filter never
 depends on a JOIN, and are removed by `ON DELETE CASCADE` with their document. The text column is
 *deferred*: it is not read when listing. Uploaded bytes wait in `document_files` only until the
 worker has processed them, and are then deleted, so originals are still not kept
@@ -206,6 +232,8 @@ the model file and its metrics are produced at training time.
 | Documents | `python-multipart`, `pypdf` | File uploads; pure-Python PDF text extraction with no system libraries |
 | Background work | A worker process + the `documents` table as the queue (`FOR UPDATE SKIP LOCKED`) — no Redis, no Celery | No new service; document and job committed together; see [ADR-021](docs/adr/ADR-021-postgres-table-as-job-queue.md) |
 | Search | PostgreSQL full-text search (`tsvector`, GIN, `ts_rank`) | Stemming and ranking in the database we already run; the baseline embeddings must beat — see [ADR-018](docs/adr/ADR-018-postgres-full-text-search-baseline.md) |
+| Embeddings | `fastembed` (ONNX Runtime) running `all-MiniLM-L6-v2` on the CPU; NumPy | Local and free; same vectors as sentence-transformers without PyTorch (import 21–25 s vs 90–150 s here) — see [ADR-023](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md) |
+| Vector search | `bytea` column + brute force in NumPy | Exact, simplest baseline; measured to grow with the organisation — see [ADR-024](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
 
@@ -214,10 +242,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v7 — Background processing for document ingestion.** See
-[docs/versions/v7-async-processing.md](docs/versions/v7-async-processing.md) for the full
+**v8 — Embeddings: search by meaning.** See
+[docs/versions/v8-embeddings.md](docs/versions/v8-embeddings.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v7-async-processing/README.md](docs/versions/v7-async-processing/README.md) for
+[docs/versions/v8-embeddings/README.md](docs/versions/v8-embeddings/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -232,7 +260,8 @@ a short guide.
 | v5 | `v5-rate-limiting` | One caller could spend unbounded CPU: `/auth/login` is ~0.7–0.9 s of bcrypt per anonymous attempt, and `/classify` was public. Pagination bounded work per request, not requests per caller | Complete |
 | v6 | `v6-document-ingestion` | A knowledge platform with no knowledge: nowhere to store a document, nothing to read a file, nothing to find a passage | Complete |
 | v7 | `v7-async-processing` | Extraction ran inside the upload request (300-page PDF ~8 s) and, through the GIL, slowed every other request (`/health` P50 15 ms → 335–729 ms) | Complete |
-| v8 | `v8-embeddings` | Keyword search misses paraphrased questions (hit@3 0.47, 20% empty) | Next |
+| v8 | `v8-embeddings` | Keyword search misses paraphrased questions (hit@3 0.47, 20% empty) | Complete |
+| v9 | `v9-vector-search` | Semantic search reads every vector per question: 10.5 s P50 at 50,000 chunks, of which the maths is 36 ms | Next (proposed) |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -241,12 +270,13 @@ authentication did not. Old branches remain on GitHub as engineering history.
 The whole chain in one picture — the problem that forced each version, what changed, and what was
 measured afterwards:
 
-![Architecture evolution, v0 to v7](docs/architecture/evolution.svg)
+![Architecture evolution, v0 to v8](docs/architecture/evolution.svg)
 
 Carried forward, measured but not yet fixed: `total` still costs more than the page it
 accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
-rate-limit buckets live in one process, so every extra worker multiplies the limits; keyword
-search misses paraphrased questions; nothing alerts anyone when the document worker stops.
+rate-limit buckets live in one process, so every extra worker multiplies the limits; semantic
+search cost grows with the organisation; embedding is slow on a CPU; nothing alerts anyone when
+the document worker stops.
 
 ## 11. How to Run
 
@@ -269,7 +299,8 @@ alembic upgrade head             # creates the schema
 uvicorn app.main:app
 ```
 
-And, in a second terminal, the worker that processes uploaded documents:
+And, in a second terminal, the worker that processes uploaded documents. Its first start downloads
+the embedding model (~90 MB) into `models/embeddings`:
 
 ```bash
 python -m app.worker
@@ -286,6 +317,7 @@ curl -X POST http://127.0.0.1:8000/classify -H "Authorization: Bearer $TOKEN" -H
 curl -X POST http://127.0.0.1:8000/documents -H "Authorization: Bearer $TOKEN" -F "file=@evaluation/knowledge_base/refund-policy.md"
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/documents/1     # "queued" → "ready"
 curl -G http://127.0.0.1:8000/documents/search -H "Authorization: Bearer $TOKEN" --data-urlencode "q=how long does a refund take"
+curl -G http://127.0.0.1:8000/documents/search -H "Authorization: Bearer $TOKEN" --data-urlencode "q=Can I get my money back?" -d mode=semantic
 curl -i http://127.0.0.1:8000/tickets     # 401: no token
 ```
 
@@ -312,10 +344,18 @@ Configuration (environment variables or `.env`, see `.env.example`):
 | `CHUNK_MAX_CHARS` / `CHUNK_OVERLAP_CHARS` | `800` / `100` | Chunk size and overlap |
 | `MAX_SEARCH_RESULTS` | `20` | Ceiling on `limit` for `/documents/search` |
 | `WORKER_POLL_SECONDS` | `1.0` | How often an idle worker checks for queued documents |
-| `WORKER_STALE_AFTER_SECONDS` | `300` | A document `processing` longer than this is treated as abandoned and requeued |
+| `WORKER_STALE_AFTER_SECONDS` | `300` | A document with no heartbeat for longer than this is treated as abandoned and requeued |
 | `WORKER_MAX_ATTEMPTS` | `3` | Tries per document for unexpected errors |
 | `MAX_PENDING_DOCUMENTS_PER_ORGANIZATION` | `50` | Queue ceiling per organisation; above it uploads get 429 |
+| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model; changing it requires `scripts/embed_existing_documents.py` |
+| `EMBEDDING_CACHE_DIR` | `models/embeddings` | Where the downloaded model is kept |
 | `LOG_LEVEL` | `INFO` | Python logging level |
+
+Documents processed before v8 have no embeddings; semantic search ignores them until:
+
+```bash
+python scripts/embed_existing_documents.py                      # or --organization-id N
+```
 
 The Compose credentials are local development values only. Real deployments take them from the
 environment or a secret manager.
@@ -332,7 +372,7 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-196 tests, 402 seconds in the v7 session (on battery, with other work running — not comparable to v6's 187 s) — most of it bcrypt doing its job (see §15):
+207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
 
 - **Document pipeline, no HTTP and no database** (29 tests) — chunks never exceed the maximum;
   offsets point at the exact text; **no character of the document is lost**; neighbours overlap;
@@ -347,12 +387,20 @@ pytest -v
   its file; cross-tenant 404 on read, delete and search; stemming, `any` vs `all`, harmless
   operator characters, bounded results; storage failure → 503 on all five endpoints; an oversized
   body refused before authentication; a per-user upload budget that reads do not spend.
-- **Worker** (12 tests) — oldest first; **two workers never take the same document** (SKIP
+- **Semantic search** (6 tests, v8) — a paraphrase keyword search misses ("Can I get my money
+  back?") is found; a question nothing answers **still returns results**, with a low score;
+  tenant isolation; documents embedded by another model are never compared; bounds and empty
+  queries; an unavailable model → 503 while keyword search keeps working.
+- **Worker** (17 tests) — oldest first; **two workers never take the same document** (SKIP
   LOCKED, with a real second session holding the lock); a failure while saving leaves no chunks
   and requeues; repeated failures end in `failed`; a document deleted mid-processing is discarded;
   a worker that was replaced throws its result away; abandoned documents are requeued, or failed
   when out of attempts, and fresh ones are left alone; the loop survives a database error; and the
-  worker process, started in a **fresh interpreter**, knows every table it writes.
+  worker process, started in a **fresh interpreter**, knows every table it writes. Since v8: every
+  chunk is saved with a normalised 384-number embedding; an unavailable model requeues instead of
+  failing the file; the worker starts even if the model cannot load; old documents can be embedded
+  later; and **a long embedding keeps its document alive** through heartbeats (verified to fail
+  with the heartbeat switched off).
 
 - **Rate limiting** — the token bucket tested with a fake clock (time moved by assignment, so the
   tests are exact and instant): burst then refuse, exact `Retry-After`, refill, no saving up beyond
@@ -422,6 +470,23 @@ The articles and questions were written by the same author, so the lexical 1.00 
 With n=30, one question is 3.3 points. This is a baseline for comparing the next retrieval
 method on identical questions, not a claim about real-world accuracy.
 
+### Retrieval (v8): semantic search on the same questions
+
+`evaluation/results/v8-semantic-search.json`. The keyword rows of the same run reproduced v6's
+numbers exactly.
+
+| | hit@1 | hit@3 | hit@5 | MRR | returned nothing |
+|---|---|---|---|---|---|
+| keyword, overall | 0.60 | 0.73 | 0.73 | 0.66 | 10% |
+| **semantic, overall** | **0.80** | **0.93** | **1.00** | **0.87** | **0%** |
+| keyword, paraphrase | 0.20 | 0.47 | 0.47 | 0.31 | 20% |
+| **semantic, paraphrase** | **0.60** | **0.87** | **1.00** | **0.74** | **0%** |
+
+Lexical questions stay at 1.00 with both. Two paraphrases rank 4th: "The six digit number from my
+phone app is not accepted" (two-factor authentication) and "Can I close our company account for
+good?" (delete account). "0% returned nothing" is not purely good news: semantic search *always*
+returns something, including for questions the knowledge base cannot answer.
+
 ## 14. Architecture Decisions
 
 - [ADR-001 — Classical ML model as the baseline classifier](docs/adr/ADR-001-classical-ml-baseline-classifier.md)
@@ -446,6 +511,8 @@ method on identical questions, not a claim about real-world accuracy.
 - [ADR-020 — Refuse oversized request bodies before authentication](docs/adr/ADR-020-body-size-limit-before-auth.md)
 - [ADR-021 — Use the documents table as the job queue](docs/adr/ADR-021-postgres-table-as-job-queue.md)
 - [ADR-022 — Keep waiting files in PostgreSQL until they are processed](docs/adr/ADR-022-waiting-files-in-postgres.md)
+- [ADR-023 — Embed chunks with a small local model, run by ONNX Runtime](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md)
+- [ADR-024 — Store vectors as bytes and compare them all in NumPy](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -573,6 +640,30 @@ because it never imported the `users` and `organizations` models. The worker's c
 also seen outside a test: a worker killed mid-document left it `processing`, and the next worker
 logged `1 requeued` and finished it.
 
+**v8 — embeddings**, `scripts/evaluate_retrieval.py` and `scripts/measure_semantic_search.py`, one
+API process, `DB_ECHO=false`. The laptop was partly on battery and heavily loaded throughout (the
+same login took 0.75 s in one run and 6.45 s in another), so absolute times are "this machine,
+today". The quality numbers above do not depend on the machine.
+
+| `GET /documents/search`, `limit=5`, P50 | keyword | semantic |
+|---|---|---|
+| 20 chunks (evaluation set) | 64 ms | 627 ms |
+| 1,000 chunks | 65 ms | 825 ms |
+| 10,000 chunks | 94 ms | 4,428 ms |
+| 50,000 chunks | 152 ms | **10,498 ms** |
+
+At 50,000 chunks, timed in-process: reading the vectors out of PostgreSQL took **13,008 ms**,
+turning them into one array 630 ms, and scoring plus sorting **36 ms**. Brute force is exact, but
+its cost is data movement, and it grows with the organisation, not with `limit`
+([ADR-024](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md)). This is the trigger for v9.
+
+The model itself: 141 ms to embed one question, and 1–10 chunks per second to embed documents on
+this CPU. A 300-page PDF (1,246 chunks) took about **7.5 minutes** from upload to searchable,
+against 8.5–10.3 s in v7. That broke v7's 5-minute "worker died" timeout, which the tests (small
+documents) could not show, so the worker now sends a heartbeat after every 256 chunks. The first
+library, sentence-transformers, produced identical vectors but took 90–150 s to import here, so it
+was replaced by fastembed at 21–25 s ([ADR-023](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md)).
+
 Listing, with 13,000 rows in the table (client-measured, includes client JSON parsing):
 
 | Version | Request | Rows returned | Time |
@@ -617,7 +708,9 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
    `BrokenRepository` double broke in **both** v3 and v4 for the same structural reason: N
    implementations means N manual edits with no compiler help. mypy or Pyright would have caught
    all of them.
-7. *The test suite takes 187–402 seconds* (196 tests; 103 s in v4), which is approaching the point where it stops being run
+7. *The test suite takes 1,378 seconds* (207 tests; 103 s in v4; 402 s in v7), and one timing-based rate-limit
+   test fails when the machine is heavily loaded (4 bcrypt calls outlast the 15 s refill), which is
+   approaching the point where it stops being run
    often enough to be useful. Both standard fixes cost something real: a lower bcrypt cost factor
    in tests means no longer testing the production configuration, and session-scoping the
    registration means tests share a user.
@@ -641,9 +734,11 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
 15. *A stopped worker is silent.* Uploads keep succeeding and stay `queued`, and nothing alerts
     anyone. Queue depth and the age of the oldest queued document are the first metrics needed.
     One worker processes documents in series; a document abandoned by a crashed worker waits
-    5 minutes before it is retried.
-16. *Keyword search misses meaning.* Paraphrase hit@3 is 0.47, and 20% of paraphrases return
-    nothing. Trigger for embeddings.
+    5 minutes (without a heartbeat) before it is retried.
+16. *Semantic search reads every vector on every question.* 4.4 s at 10,000 chunks, 10.5 s at
+    50,000 (P50). Trigger for pgvector with an index (v9). It also never answers "nothing found",
+    so a relevance threshold is needed before generated answers (v10). Embedding runs at 1–10
+    chunks/s on this CPU, so large documents take minutes to become searchable.
 17. *Search cost grows with the number of matching chunks*, not with `limit` — v3's problem, inside
     the database. Bounded (108 ms at 39,588 chunks, worst case), not flat.
 18. *Original files are not kept* — no re-extraction, no download

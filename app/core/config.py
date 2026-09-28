@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.7.0"
+    app_version: str = "0.8.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -94,6 +94,17 @@ class Settings(BaseSettings):
     # uploads per minute; this bounds the queue itself, so one organisation
     # cannot bury everyone else's uploads under its own.
     max_pending_documents_per_organization: int = 50
+
+    # Embeddings (v8). A small sentence-embedding model that runs on a CPU:
+    # 22 million parameters, 384 numbers per text. Changing this name makes every
+    # existing document invisible to semantic search until it is re-embedded
+    # (scripts/embed_existing_documents.py), because vectors from different
+    # models cannot be compared.
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Where the downloaded model is kept. Inside models/, which is gitignored,
+    # like the trained classifier. The default would be the system temp folder,
+    # which the OS may clear - and then the next start downloads it again.
+    embedding_cache_dir: str = "models/embeddings"
 
     # Read a .env file if present; real environment variables take priority over it.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

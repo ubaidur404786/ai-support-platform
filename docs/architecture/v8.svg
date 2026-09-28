@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="1010" viewBox="0 0 1040 1010" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="1010" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v8 — Embeddings: search by meaning</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: keyword search matches words, not meaning — "Can I get my money back?" finds nothing (paraphrase hit@3 0.47).</text>
+  <text x="30" y="74" fill="#1565c0">FIX: the worker turns each chunk into 384 numbers (an embedding); mode=semantic compares the question with them.</text>
+
+  <!-- Worker process -->
+  <rect x="20" y="92" width="480" height="430" rx="8" fill="none" stroke="#1565c0" stroke-dasharray="5,4"/>
+  <text x="34" y="112" font-size="12" font-weight="bold" fill="#1565c0" letter-spacing="1">WORKER PROCESS — python -m app.worker (INGEST)</text>
+
+  <rect x="40" y="124" width="440" height="44" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="143" font-weight="bold" fill="#222" font-size="12">worker.py — load the model at start (new)</text>
+  <text x="52" y="160" fill="#666" font-size="10">7–15 s. A model that cannot load is logged at once; the worker keeps running.</text>
+  <line x1="260" y1="168" x2="260" y2="186" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="188" width="440" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="207" font-weight="bold" fill="#222" font-size="12">processing.py — claim → extract_text → chunk_text (v7)</text>
+  <text x="52" y="224" fill="#666" font-size="10">FOR UPDATE SKIP LOCKED; no transaction open during the slow part</text>
+  <line x1="260" y1="232" x2="260" y2="250" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="252" width="440" height="78" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="271" font-weight="bold" fill="#222" font-size="12">embeddings.py — embed_texts(chunks) (new)</text>
+  <text x="52" y="288" fill="#333" font-size="11">all-MiniLM-L6-v2 via fastembed (ONNX Runtime, CPU, no PyTorch)</text>
+  <text x="52" y="304" fill="#333" font-size="11">"Refunds are issued within ten…" → [0.021, −0.113, … 384 numbers]</text>
+  <text x="52" y="320" fill="#666" font-size="10">256 chunks per batch; length-1 vectors, so dot product = cosine similarity</text>
+  <line x1="260" y1="330" x2="260" y2="348" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="350" width="440" height="58" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="369" font-weight="bold" fill="#222" font-size="12">_heartbeat() after every batch (new)</text>
+  <text x="52" y="386" fill="#333" font-size="10">A 300-page PDF now takes ~7.5 min — longer than the 5-min "worker died"</text>
+  <text x="52" y="400" fill="#333" font-size="10">timeout. Refreshing processing_started_at keeps other workers away.</text>
+  <line x1="260" y1="408" x2="260" y2="426" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="428" width="440" height="78" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="447" font-weight="bold" fill="#222" font-size="12">ONE transaction: chunks + embeddings + "ready"</text>
+  <text x="52" y="464" fill="#333" font-size="11">documents.embedding_model = "…all-MiniLM-L6-v2"</text>
+  <text x="52" y="480" fill="#666" font-size="10">Model unavailable → back to "queued" (3 attempts), not "failed": the file is fine.</text>
+  <text x="52" y="495" fill="#666" font-size="10">Older documents: scripts/embed_existing_documents.py [--organization-id]</text>
+
+  <!-- PostgreSQL -->
+  <rect x="530" y="92" width="490" height="150" rx="8" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="546" y="114" font-weight="bold" fill="#222" font-size="13">PostgreSQL</text>
+  <text x="546" y="136" fill="#1565c0" font-size="11">document_chunks.embedding: bytea, 384 × float32 = 1,536 bytes</text>
+  <text x="546" y="154" fill="#1565c0" font-size="11">documents.embedding_model: which model made the vectors</text>
+  <text x="546" y="174" fill="#666" font-size="10">Vectors from different models cannot be compared: semantic search</text>
+  <text x="546" y="188" fill="#666" font-size="10">skips documents embedded by another model until they are re-embedded.</text>
+  <text x="546" y="210" fill="#666" font-size="10">Migration d7a2c4e9b1f5 — both columns nullable; no model run inside it.</text>
+  <text x="546" y="228" fill="#666" font-size="10">tsvector + GIN (keyword search) unchanged.</text>
+  <line x1="480" y1="467" x2="528" y2="170" stroke="#1565c0" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+
+  <!-- API process -->
+  <rect x="530" y="262" width="490" height="260" rx="8" fill="none" stroke="#999" stroke-dasharray="5,4"/>
+  <text x="546" y="282" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">API PROCESS (uvicorn) — SEARCH</text>
+
+  <rect x="550" y="294" width="450" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="562" y="313" font-family="Consolas, monospace" fill="#333" font-size="11">GET /documents/search?q=Can I get my money back?</text>
+  <text x="562" y="329" font-family="Consolas, monospace" fill="#1565c0" font-size="11">                      &amp;mode=semantic   (default: keyword)</text>
+  <line x1="775" y1="338" x2="775" y2="356" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="550" y="358" width="450" height="44" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="562" y="377" font-weight="bold" fill="#222" font-size="12">service.py — embed the question (~141 ms CPU)</text>
+  <text x="562" y="394" fill="#666" font-size="10">Model fails → 503 "try mode=keyword"; keyword search keeps working</text>
+  <line x1="775" y1="402" x2="775" y2="420" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="550" y="422" width="450" height="58" rx="6" fill="#fdf0ef" stroke="#c62828" stroke-width="1.5"/>
+  <text x="562" y="441" font-weight="bold" fill="#222" font-size="12">repository.py — semantic_search(): brute force (ADR-024)</text>
+  <text x="562" y="458" fill="#333" font-size="10">SELECT every vector of the organisation → matrix @ question → top 5</text>
+  <text x="562" y="472" fill="#333" font-size="10">Exact, simple — but the cost grows with the organisation, not with limit.</text>
+  <line x1="775" y1="480" x2="775" y2="496" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="700" y1="422" x2="700" y2="244" stroke="#333" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="706" y="258" fill="#666" font-size="10">reads every embedding</text>
+
+  <text x="562" y="512" font-family="Consolas, monospace" fill="#333" font-size="10">200 {"mode":"semantic","results":[{"document_title":"Refund policy",…}]}</text>
+
+  <!-- Measurements -->
+  <text x="30" y="552" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">MEASURED (noisy laptop, 1 API process + 1 worker, DB_ECHO=false, httpx client)</text>
+  <rect x="30" y="562" width="320" height="140" rx="6" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="42" y="582" font-weight="bold" fill="#222" font-size="12">Retrieval quality (same 30 questions)</text>
+  <text x="42" y="602" fill="#333" font-size="11">hit@3 overall: keyword 0.73 → semantic 0.93</text>
+  <text x="42" y="620" fill="#333" font-size="11">hit@3 paraphrase: 0.47 → 0.87</text>
+  <text x="42" y="638" fill="#333" font-size="11">MRR: 0.66 → 0.87 · empty: 10% → 0%</text>
+  <text x="42" y="656" fill="#333" font-size="11">lexical: 1.00 with both</text>
+  <text x="42" y="678" fill="#666" font-size="10">Keyword rows reproduce v6 exactly. n = 30:</text>
+  <text x="42" y="692" fill="#666" font-size="10">one question = 3.3 points.</text>
+
+  <rect x="360" y="562" width="340" height="140" rx="6" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="372" y="582" font-weight="bold" fill="#222" font-size="12">Search latency, P50, limit=5</text>
+  <text x="372" y="602" fill="#333" font-size="11">chunks     keyword    semantic</text>
+  <text x="372" y="620" fill="#333" font-size="11">20              64 ms      627 ms</text>
+  <text x="372" y="638" fill="#333" font-size="11">10,000        94 ms     4,428 ms</text>
+  <text x="372" y="656" fill="#c62828" font-size="11">50,000      152 ms   10,498 ms</text>
+  <text x="372" y="678" fill="#666" font-size="10">At 50k (in-process): reading vectors 13,008 ms,</text>
+  <text x="372" y="692" fill="#666" font-size="10">the maths 36 ms.</text>
+
+  <rect x="710" y="562" width="310" height="140" rx="6" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="722" y="582" font-weight="bold" fill="#222" font-size="12">What the model costs</text>
+  <text x="722" y="602" fill="#333" font-size="11">Embedding: 1–10 chunks/s (CPU)</text>
+  <text x="722" y="620" fill="#333" font-size="11">300-page PDF ready: 8.5–10.3 s → ~7.5 min</text>
+  <text x="722" y="638" fill="#333" font-size="11">One question: 141 ms</text>
+  <text x="722" y="656" fill="#333" font-size="11">Import: PyTorch stack 90–150 s → 21–25 s</text>
+  <text x="722" y="678" fill="#666" font-size="10">fastembed replaced sentence-transformers:</text>
+  <text x="722" y="692" fill="#666" font-size="10">identical vectors, far lighter (ADR-023).</text>
+
+  <!-- trade-offs -->
+  <rect x="30" y="720" width="990" height="100" rx="6" fill="#ffffff" stroke="#bbb"/>
+  <text x="42" y="740" font-weight="bold" fill="#222" font-size="12">New complexity</text>
+  <text x="42" y="760" fill="#333" font-size="11">Semantic search never says "no match": "capital of France?" still returns the refund policy (score &lt; 0.3) — risky once chunks feed answers.</text>
+  <text x="42" y="778" fill="#333" font-size="11">Ingestion is minutes, not seconds, for large files. A model runs in both processes. Changing the model means re-embedding every document.</text>
+  <text x="42" y="796" fill="#333" font-size="11">Found by measuring: the 5-min stale timeout was shorter than a real document — fixed with a heartbeat (test fails without it).</text>
+
+  <!-- next limitation -->
+  <rect x="30" y="838" width="990" height="150" rx="6" fill="#fdf0ef" stroke="#c62828" stroke-width="1.5"/>
+  <text x="44" y="860" font-weight="bold" fill="#222" font-size="13">Next limitation</text>
+  <text x="44" y="882" fill="#333" font-size="12">Semantic search reads every vector of the organisation on every question: 4.4 s at 10,000 chunks, 10.5 s at 50,000 (P50).</text>
+  <text x="44" y="902" fill="#333" font-size="12">The maths is 36 ms — moving 77 MB out of PostgreSQL is the cost. → v9-vector-search: pgvector computes the distance in the</text>
+  <text x="44" y="922" fill="#333" font-size="12">database, with an HNSW index, measured against this exact baseline for latency AND recall.</text>
+  <text x="44" y="946" fill="#666" font-size="11">Also open: embedding throughput (1–10 chunks/s) sets how fast documents become searchable; no relevance threshold ("I don't know")</text>
+  <text x="44" y="962" fill="#666" font-size="11">before RAG; keyword and semantic are still separate modes (hybrid retrieval later).</text>
+</svg>

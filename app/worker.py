@@ -24,12 +24,29 @@ import app.tickets.models  # noqa: F401
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.logging import configure_logging
+from app.documents.embeddings import EmbeddingUnavailable, embed_texts
 from app.documents.processing import process_next_document, requeue_stale_documents
 
 logger = logging.getLogger("app.worker")
 
 
+def load_embedding_model() -> None:
+    """Load the model now, before the first document, not in the middle of it.
+
+    Loading takes tens of seconds. Done here, the first upload does not pay
+    for it, and a model that cannot load is reported the moment the worker
+    starts rather than discovered on someone's upload.
+    """
+    try:
+        embed_texts(["warm up"])
+    except EmbeddingUnavailable:
+        # Keep running: documents are retried (up to WORKER_MAX_ATTEMPTS) and
+        # succeed once the model is available again.
+        logger.exception("Embedding model could not be loaded")
+
+
 def run_forever() -> None:
+    load_embedding_model()
     logger.info("Worker started; checking for documents every %s s", settings.worker_poll_seconds)
     while True:
         try:

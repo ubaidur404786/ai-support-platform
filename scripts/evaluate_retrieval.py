@@ -14,10 +14,16 @@ evaluation/retrieval_questions.jsonl, and reports:
 split by question type: "lexical" (shares key words with the article) and
 "paraphrase" (same meaning, different words).
 
+Three runs over the same questions: keyword search with match=any, keyword
+search with match=all, and (since v8) semantic search with embeddings.
+
 Start the server and the worker (python -m app.worker) first - uploads are
 processed in the background since v7. Then, from the repository root:
     python scripts/evaluate_retrieval.py
-    python scripts/evaluate_retrieval.py --output evaluation/results/v6-keyword-search.json
+    python scripts/evaluate_retrieval.py --output evaluation/results/v8-semantic-search.json
+
+Documents uploaded by a run before v8 have no embeddings: run
+scripts/embed_existing_documents.py once, or semantic search will not see them.
 """
 
 import argparse
@@ -79,14 +85,16 @@ def ranked_documents(results: list[dict], id_to_file: dict[int, str]) -> list[st
     return seen
 
 
-def evaluate(client: httpx.Client, questions: list[dict], id_to_file: dict[int, str], match: str) -> dict:
+def evaluate(
+    client: httpx.Client, questions: list[dict], id_to_file: dict[int, str], mode: str, match: str
+) -> dict:
     rows = []
     latencies = []
     for item in questions:
         start = time.perf_counter()
         response = client.get(
             "/documents/search",
-            params={"q": item["question"], "limit": TOP_K * 3, "match": match},
+            params={"q": item["question"], "limit": TOP_K * 3, "mode": mode, "match": match},
         )
         latencies.append((time.perf_counter() - start) * 1000)
         response.raise_for_status()
@@ -106,6 +114,7 @@ def evaluate(client: httpx.Client, questions: list[dict], id_to_file: dict[int, 
         }
 
     return {
+        "mode": mode,
         "match": match,
         "overall": summarise(rows),
         "lexical": summarise([r for r in rows if r["type"] == "lexical"]),
@@ -116,7 +125,8 @@ def evaluate(client: httpx.Client, questions: list[dict], id_to_file: dict[int, 
 
 
 def print_report(report: dict) -> None:
-    print(f"\nmatch={report['match']}   search latency P50 {report['latency_ms_p50']:.1f} ms")
+    label = f"mode={report['mode']}" + (f" match={report['match']}" if report["mode"] == "keyword" else "")
+    print(f"\n{label}   search latency P50 {report['latency_ms_p50']:.1f} ms")
     print(f"  {'':<11}{'n':>3}  {'hit@1':>6} {'hit@3':>6} {'hit@5':>6} {'MRR':>6} {'empty':>6}")
     for part in ("overall", "lexical", "paraphrase"):
         s = report[part]
@@ -141,7 +151,11 @@ def main() -> None:
     with httpx.Client(base_url=BASE_URL, timeout=60) as client:
         authenticate(client)
         id_to_file = upload_knowledge_base(client)
-        reports = [evaluate(client, questions, id_to_file, match) for match in ("any", "all")]
+        runs = [("keyword", "any"), ("keyword", "all"), ("semantic", "any")]
+        # One untimed semantic query first: the API loads the model on the first
+        # one (seconds), which would otherwise land in the latency of question 1.
+        client.get("/documents/search", params={"q": "warm up", "mode": "semantic"})
+        reports = [evaluate(client, questions, id_to_file, mode, match) for mode, match in runs]
 
     for report in reports:
         print_report(report)

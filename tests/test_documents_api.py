@@ -11,13 +11,14 @@ test, what the worker process does in real life. The worker's own edge cases
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.core.config import Settings
 from app.core.database import SessionLocal
 from app.core.errors import StorageError
 from app.documents.dependencies import get_document_repository
-from app.documents.models import DocumentFile
+from app.documents.embeddings import EmbeddingUnavailable
+from app.documents.models import Document, DocumentFile
 from app.documents.processing import process_next_document
 from app.main import create_app
 from tests.conftest import _register_and_login
@@ -386,6 +387,87 @@ def test_search_requires_a_token(anonymous_client):
     assert anonymous_client.get("/documents/search", params={"q": "refund"}).status_code == 401
 
 
+# --- Semantic search (v8) -------------------------------------------------------------
+
+
+def semantic(client, query, **params):
+    return client.get("/documents/search", params={"q": query, "mode": "semantic", **params})
+
+
+def test_semantic_search_finds_a_paraphrase_that_keyword_search_misses(tickets_client):
+    refunds = upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+    upload_and_process(tickets_client, "passwords.md", PASSWORDS.encode())
+    question = "Can I get my money back?"  # no word in common with the refund policy
+
+    keyword = tickets_client.get("/documents/search", params={"q": question}).json()
+    meaning = semantic(tickets_client, question).json()
+
+    assert keyword["results"] == []
+    assert meaning["mode"] == "semantic"
+    assert meaning["results"][0]["document_id"] == refunds["id"]
+    # Cosine similarity: the refund chunk is clearly closer than the other one.
+    first, second = meaning["results"][0]["rank"], meaning["results"][1]["rank"]
+    assert first > second
+
+
+def test_semantic_search_always_returns_the_closest_chunks(tickets_client):
+    """Unlike keyword search it never comes back empty - even for a question the
+    knowledge base cannot answer. The score is low, but a result is returned.
+    Something later (a threshold, a generated answer) has to judge it."""
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    results = semantic(tickets_client, "What is the capital of France?").json()["results"]
+
+    assert len(results) == 1
+    assert results[0]["rank"] < 0.3
+
+
+def test_semantic_search_stays_inside_the_organisation(tickets_client, second_org_client):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    assert semantic(second_org_client, "money back").json()["results"] == []
+
+
+def test_documents_embedded_by_another_model_are_not_compared(tickets_client):
+    """Vectors from two models live in different spaces: comparing them gives a
+    number, but a meaningless one. Such documents are left out until re-embedded."""
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+    with SessionLocal() as session:
+        session.execute(update(Document).values(embedding_model="some-older-model"))
+        session.commit()
+
+    assert semantic(tickets_client, "money back").json()["results"] == []
+    # Keyword search does not use embeddings and still finds it.
+    keyword = tickets_client.get("/documents/search", params={"q": "refund"}).json()
+    assert len(keyword["results"]) == 1
+
+
+def test_semantic_search_is_bounded_and_rejects_empty_queries(tickets_client):
+    for i in range(3):
+        upload_and_process(tickets_client, f"r{i}.txt", f"Refund rule number {i}".encode())
+
+    assert len(semantic(tickets_client, "refund", limit=2).json()["results"]) == 2
+    assert semantic(tickets_client, "refund", limit=21).status_code == 422
+    assert semantic(tickets_client, "???").status_code == 422
+
+
+def test_an_unavailable_model_is_503_and_keyword_search_still_works(tickets_client, monkeypatch):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    def model_missing(texts, model_name):
+        raise EmbeddingUnavailable("model not downloaded")
+
+    monkeypatch.setattr("app.documents.service.embed_texts", model_missing)
+
+    response = semantic(tickets_client, "money back")
+    keyword = tickets_client.get("/documents/search", params={"q": "refund"})
+
+    assert response.status_code == 503
+    assert "mode=keyword" in response.json()["detail"]
+    assert keyword.status_code == 200
+    assert len(keyword.json()["results"]) == 1
+
+
 # --- Failure paths ------------------------------------------------------------------
 
 
@@ -415,6 +497,9 @@ def test_storage_failure_is_503(tickets_client):
         def search(self, organization_id, words, limit, match="any"):
             raise StorageError("connection refused")
 
+        def semantic_search(self, organization_id, query_vector, model_name, limit):
+            raise StorageError("connection refused")
+
     tickets_client.app.dependency_overrides[get_document_repository] = BrokenRepository
     try:
         assert upload(tickets_client, "r.md", REFUNDS.encode()).status_code == 503
@@ -422,6 +507,8 @@ def test_storage_failure_is_503(tickets_client):
         assert tickets_client.get("/documents/1").status_code == 503
         assert tickets_client.delete("/documents/1").status_code == 503
         assert tickets_client.get("/documents/search", params={"q": "x"}).status_code == 503
+        semantic_query = {"q": "x", "mode": "semantic"}
+        assert tickets_client.get("/documents/search", params=semantic_query).status_code == 503
     finally:
         tickets_client.app.dependency_overrides.clear()
 

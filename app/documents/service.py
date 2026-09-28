@@ -13,7 +13,9 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass
+from typing import Literal
 
+from app.documents.embeddings import embed_texts
 from app.documents.extraction import DocumentTooLarge, derive_title, detect_type
 from app.documents.models import QUEUED, Document
 from app.documents.repository import DocumentRepository, Match, SearchHit
@@ -23,6 +25,10 @@ logger = logging.getLogger(__name__)
 # More words than this adds almost nothing to keyword ranking and makes the query
 # more expensive: every word is one more lookup in the GIN index.
 MAX_QUERY_WORDS = 32
+
+# "keyword": chunks that share words with the query (PostgreSQL full-text, v6).
+# "semantic": chunks whose embedding is closest to the query's (v8).
+SearchMode = Literal["keyword", "semantic"]
 
 
 class DuplicateDocument(Exception):
@@ -55,12 +61,14 @@ class DocumentService:
         max_pending_documents: int = 50,
         max_page_size: int = 200,
         max_search_results: int = 20,
+        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     ) -> None:
         self._repository = repository
         self._max_document_bytes = max_document_bytes
         self._max_pending_documents = max_pending_documents
         self._max_page_size = max_page_size
         self._max_search_results = max_search_results
+        self._embedding_model = embedding_model
 
     def upload(
         self,
@@ -145,13 +153,28 @@ class DocumentService:
         return self._repository.delete(organization_id, document_id)
 
     def search(
-        self, organization_id: int, query: str, limit: int = 5, match: Match = "any"
+        self,
+        organization_id: int,
+        query: str,
+        limit: int = 5,
+        match: Match = "any",
+        mode: SearchMode = "keyword",
     ) -> list[SearchHit]:
         # Keep letters and digits only, lowercased. Everything else - punctuation,
-        # operators, quotes - is dropped rather than escaped, because in this
-        # version search is about words and nothing else.
+        # operators, quotes - is dropped rather than escaped, because keyword
+        # search is about words and nothing else.
         words = re.findall(r"[a-z0-9]+", query.lower())[:MAX_QUERY_WORDS]
+        # The same rule for both modes: "?!" means nothing to either of them.
         if not words:
             raise EmptySearchQuery("The query contains no searchable words")
         limit = max(1, min(limit, self._max_search_results))
+
+        if mode == "semantic":
+            # The model reads the question as written - punctuation, word order
+            # and all - so it gets the original text, not the cleaned words.
+            # Raises EmbeddingUnavailable if the model cannot run.
+            query_vector = embed_texts([query.strip()], self._embedding_model)[0]
+            return self._repository.semantic_search(
+                organization_id, query_vector, self._embedding_model, limit
+            )
         return self._repository.search(organization_id, words, limit, match)
