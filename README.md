@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v8 — Embeddings: search by meaning** (branch `v8-embeddings`)
+**Current version: v9 — Vector search inside PostgreSQL** (branch `v9-vector-search`)
 
 ## 1. Project Overview
 
@@ -16,7 +16,7 @@ The engineering goal is a production-style AI system whose every component can b
 what problem forced it in, what it costs, and what happens when it fails. The architecture
 history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
 `v3-pagination`, `v4-authentication`, `v5-rate-limiting`, `v6-document-ingestion`,
-`v7-async-processing`, `v8-embeddings`, ...)
+`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -41,13 +41,14 @@ a human steps in where the model is unsure rather than everywhere.
 | Keyword search over document chunks, with a measured retrieval baseline | Available | v6 |
 | Documents processed in a background worker; uploads answer 202 and report `queued / processing / ready / failed` | Available | v7 |
 | Meaning-based search: every chunk embedded locally (all-MiniLM-L6-v2), `mode=semantic`; paraphrase hit@3 0.47 → 0.87 | Available | v8 |
+| Vector search in PostgreSQL (pgvector, HNSW index): 147 ms at 50,000 chunks, recall@5 0.99 on real text | Available | v9 |
 | Retrieval-augmented answers, with a relevance threshold | Planned | — |
 | Controlled actions (create / update tickets) with human approval | Planned | — |
 | Model evaluation, monitoring, and safe rollout | Planned | — |
 
 ## 4. Current Architecture
 
-![v8 architecture](docs/architecture/v8.svg)
+![v9 architecture](docs/architecture/v9.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
@@ -58,7 +59,8 @@ with a full-text index. Since v7 that processing happens in a separate **worker 
 (`python -m app.worker`): the upload only stores the file and answers 202, and PostgreSQL itself
 is the job queue. Since v8 the worker also turns every chunk into an **embedding** (384 numbers
 from a small local model run by ONNX Runtime), and search can compare meaning instead of words
-(`mode=semantic`). No cache, broker or external service yet.
+(`mode=semantic`). Since v9 those vectors live in a **pgvector** column, and PostgreSQL finds the
+nearest ones itself through an HNSW index. No cache, broker or external service yet.
 
 ```
 app/
@@ -144,9 +146,11 @@ documents have chunks, so only they appear in search.
 `GET /documents/search?q=…` (`mode=keyword`, the default) keeps only letters and digits from the
 query (so `to_tsquery` syntax can never pass through), then runs one SQL query: `WHERE
 organization_id = … AND search_vector @@ 'w1 | w2 | …' ORDER BY ts_rank(…) DESC LIMIT n` (n ≤ 20).
-With `mode=semantic`, the question is embedded in the API process (~141 ms), every embedding of
-the organisation made by the current model is read, all are scored with one NumPy matrix product
-(cosine similarity), and the text of the best `n` is fetched. If the model cannot run → **503**
+With `mode=semantic`, the question is embedded in the API process (~141 ms), and one SQL query
+returns the `n` nearest chunks of the organisation made by the current model: `ORDER BY embedding
+<=> :question LIMIT n` (cosine distance), answered through an HNSW index for large organisations.
+Two settings per search: `hnsw.iterative_scan = strict_order` (a small organisation is not starved
+by a large one sharing the index) and `hnsw.ef_search = 100`. If the model cannot run → **503**
 "try mode=keyword". Another organisation's documents are 404 on read and delete, and absent from
 both searches.
 
@@ -178,14 +182,18 @@ threshold keeps an uncertain guess from being acted on silently
 ([ADR-006](docs/adr/ADR-006-low-confidence-human-review.md)). Storing `model_version` alongside
 each prediction means a later model change can be evaluated against what the old one decided.
 
-Retrieval (v8):
+Retrieval (v8, v9):
 
 ```
 ingest (worker):  chunk text → all-MiniLM-L6-v2 (fastembed, ONNX Runtime, CPU) → 384 float32, length 1
-                  → document_chunks.embedding (bytea) + documents.embedding_model
-search (API):     question → same model → 384 numbers → dot product with every chunk of the
-                  organisation (= cosine similarity) → top n
+                  → document_chunks.embedding (vector(384), HNSW index) + documents.embedding_model
+search (API):     question → same model → 384 numbers → PostgreSQL walks the HNSW graph
+                  (cosine distance, filtered by organisation and model) → top n
 ```
+
+The index is approximate. Measured against exact search, it returned 99% of the true top 5 on
+12,000 real text paragraphs, and far less on random vectors (0.27), so recall is something to
+measure on real data ([ADR-025](docs/adr/ADR-025-pgvector-hnsw-index.md)).
 
 The model is downloaded once (~90 MB) into `models/embeddings` and runs offline after that
 ([ADR-023](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md)). `embedding_model` plays
@@ -206,7 +214,7 @@ organisation by the migration — intact, but owned by a tenant nobody logs into
 
 Documents are stored as one `documents` row (metadata, processing status, the full extracted
 text, a SHA-256 of the upload) plus N `document_chunks` rows (text, offsets, a generated
-`tsvector` with a GIN index, and since v8 a 1,536-byte embedding). Chunks carry their own `organization_id` so the tenant filter never
+`tsvector` with a GIN index, and since v8 an embedding — since v9 a pgvector `vector(384)` with an HNSW index). Chunks carry their own `organization_id` so the tenant filter never
 depends on a JOIN, and are removed by `ON DELETE CASCADE` with their document. The text column is
 *deferred*: it is not read when listing. Uploaded bytes wait in `document_files` only until the
 worker has processed them, and are then deleted, so originals are still not kept
@@ -224,7 +232,7 @@ the model file and its metrics are produced at training time.
 | API | FastAPI + Uvicorn | Validation, generated docs, dependency injection, sync endpoints in a thread pool |
 | Validation / config | Pydantic, pydantic-settings | Typed request/response models; settings from environment variables |
 | Model | scikit-learn (TF-IDF + Logistic Regression), joblib | Kilobyte-sized, ~2 ms CPU inference, standard metrics |
-| Storage | PostgreSQL 17, SQLAlchemy 2.0 (sync), psycopg 3 | Durable, shared, queryable; see [ADR-007](docs/adr/ADR-007-postgresql-system-of-record.md) and [ADR-008](docs/adr/ADR-008-sqlalchemy-orm-sync-sessions.md) |
+| Storage | PostgreSQL 17 (Alpine, plus pgvector, built from `docker/postgres/Dockerfile`), SQLAlchemy 2.0 (sync), psycopg 3 | Durable, shared, queryable; see [ADR-007](docs/adr/ADR-007-postgresql-system-of-record.md) and [ADR-008](docs/adr/ADR-008-sqlalchemy-orm-sync-sessions.md) |
 | Schema | Alembic | Versioned migrations; also builds the test database |
 | Paging | Offset pagination (`LIMIT`/`OFFSET`) | Bounded responses; see [ADR-010](docs/adr/ADR-010-offset-pagination.md) |
 | Authentication | `bcrypt`, `PyJWT`, `email-validator` | Signed bearer tokens and slow salted hashing; see [ADR-012](docs/adr/ADR-012-bearer-tokens.md) and [ADR-014](docs/adr/ADR-014-bcrypt-password-storage.md) |
@@ -233,7 +241,7 @@ the model file and its metrics are produced at training time.
 | Background work | A worker process + the `documents` table as the queue (`FOR UPDATE SKIP LOCKED`) — no Redis, no Celery | No new service; document and job committed together; see [ADR-021](docs/adr/ADR-021-postgres-table-as-job-queue.md) |
 | Search | PostgreSQL full-text search (`tsvector`, GIN, `ts_rank`) | Stemming and ranking in the database we already run; the baseline embeddings must beat — see [ADR-018](docs/adr/ADR-018-postgres-full-text-search-baseline.md) |
 | Embeddings | `fastembed` (ONNX Runtime) running `all-MiniLM-L6-v2` on the CPU; NumPy | Local and free; same vectors as sentence-transformers without PyTorch (import 21–25 s vs 90–150 s here) — see [ADR-023](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md) |
-| Vector search | `bytea` column + brute force in NumPy | Exact, simplest baseline; measured to grow with the organisation — see [ADR-024](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md) |
+| Vector search | pgvector 0.8.6: `vector(384)` column, HNSW index (cosine), `pgvector` Python package | 10.5 s → 147 ms at 50,000 chunks; vectors, text and tenant filter in one query, no second datastore — see [ADR-025](docs/adr/ADR-025-pgvector-hnsw-index.md) (v8's exact baseline: [ADR-024](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md)) and [ADR-026](docs/adr/ADR-026-build-pgvector-into-the-alpine-image.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
 
@@ -242,10 +250,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v8 — Embeddings: search by meaning.** See
-[docs/versions/v8-embeddings.md](docs/versions/v8-embeddings.md) for the full
+**v9 — Vector search inside PostgreSQL.** See
+[docs/versions/v9-vector-search.md](docs/versions/v9-vector-search.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v8-embeddings/README.md](docs/versions/v8-embeddings/README.md) for
+[docs/versions/v9-vector-search/README.md](docs/versions/v9-vector-search/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -261,7 +269,8 @@ a short guide.
 | v6 | `v6-document-ingestion` | A knowledge platform with no knowledge: nowhere to store a document, nothing to read a file, nothing to find a passage | Complete |
 | v7 | `v7-async-processing` | Extraction ran inside the upload request (300-page PDF ~8 s) and, through the GIL, slowed every other request (`/health` P50 15 ms → 335–729 ms) | Complete |
 | v8 | `v8-embeddings` | Keyword search misses paraphrased questions (hit@3 0.47, 20% empty) | Complete |
-| v9 | `v9-vector-search` | Semantic search reads every vector per question: 10.5 s P50 at 50,000 chunks, of which the maths is 36 ms | Next (proposed) |
+| v9 | `v9-vector-search` | Semantic search reads every vector per question: 10.5 s P50 at 50,000 chunks, of which the maths is 36 ms | Complete |
+| v10 | `v10-rag` | Retrieval always returns results, even when nothing is relevant — a measured relevance threshold is needed before generated answers | Next (proposed) |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -270,22 +279,23 @@ authentication did not. Old branches remain on GitHub as engineering history.
 The whole chain in one picture — the problem that forced each version, what changed, and what was
 measured afterwards:
 
-![Architecture evolution, v0 to v8](docs/architecture/evolution.svg)
+![Architecture evolution, v0 to v9](docs/architecture/evolution.svg)
 
 Carried forward, measured but not yet fixed: `total` still costs more than the page it
 accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
 rate-limit buckets live in one process, so every extra worker multiplies the limits; semantic
-search cost grows with the organisation; embedding is slow on a CPU; nothing alerts anyone when
+search never says "nothing relevant", and its index is approximate; embedding is slow on a CPU; nothing alerts anyone when
 the document worker stops.
 
 ## 11. How to Run
 
 Requirements: Python 3.11 or 3.12, and Docker.
 
-Start the database:
+Start the database. The first run builds the PostgreSQL image with pgvector (a few minutes,
+needs network access); after that it starts in seconds:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 Then the application:
@@ -372,7 +382,7 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
+209 tests, 373 seconds in the v9 session (under memory pressure); 207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
 
 - **Document pipeline, no HTTP and no database** (29 tests) — chunks never exceed the maximum;
   offsets point at the exact text; **no character of the document is lost**; neighbours overlap;
@@ -391,6 +401,10 @@ pytest -v
   back?") is found; a question nothing answers **still returns results**, with a low score;
   tenant isolation; documents embedded by another model are never compared; bounds and empty
   queries; an unavailable model → 503 while keyword search keeps working.
+- **Vector index** (2 tests, v9) — with the HNSW index forced on, the search query really uses it
+  (checked with PostgreSQL's own scan counter; fails if the query sorts by another distance), and
+  a small organisation sharing the index with a large one still gets its results (fails with
+  `0 == 3` without the iterative scan).
 - **Worker** (17 tests) — oldest first; **two workers never take the same document** (SKIP
   LOCKED, with a real second session holding the lock); a failure while saving leaves no chunks
   and requeues; repeated failures end in `failed`; a document deleted mid-processing is discarded;
@@ -512,7 +526,9 @@ returns something, including for questions the knowledge base cannot answer.
 - [ADR-021 — Use the documents table as the job queue](docs/adr/ADR-021-postgres-table-as-job-queue.md)
 - [ADR-022 — Keep waiting files in PostgreSQL until they are processed](docs/adr/ADR-022-waiting-files-in-postgres.md)
 - [ADR-023 — Embed chunks with a small local model, run by ONNX Runtime](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md)
-- [ADR-024 — Store vectors as bytes and compare them all in NumPy](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md)
+- [ADR-024 — Store vectors as bytes and compare them all in NumPy](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md) (superseded in v9)
+- [ADR-025 — Search vectors inside PostgreSQL with pgvector and an HNSW index](docs/adr/ADR-025-pgvector-hnsw-index.md)
+- [ADR-026 — Build pgvector into our own PostgreSQL Alpine image](docs/adr/ADR-026-build-pgvector-into-the-alpine-image.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -657,6 +673,21 @@ turning them into one array 630 ms, and scoring plus sorting **36 ms**. Brute fo
 its cost is data movement, and it grows with the organisation, not with `limit`
 ([ADR-024](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md)). This is the trigger for v9.
 
+**v9 — vector index**, `scripts/measure_vector_index.py` and an API run on the same 50,000
+synthetic chunks, in one session. The laptop was short of memory: the Docker VM stopped once
+during the session. Same caveat as v8: "this machine, today".
+
+| Semantic search, 50,000 chunks, `limit=5` | P50 |
+|---|---|
+| v8 brute force, in-process, same session | 6,476 ms |
+| exact inside PostgreSQL (pgvector, index off), in-process | 1,829–2,236 ms |
+| **HNSW index**, in-process, `ef_search` 40–200 | **72–95 ms** |
+| **v9 through the API**, question embedding included | **147 ms** (P95 319 ms) — keyword 149 ms |
+
+Recall@5 of the index against exact search: 0.98 / **0.99** / 1.00 (`ef_search` 40 / **100** /
+200) on 12,000 real text paragraphs; 0.13 / 0.27 / 0.42 on random vectors, where "nearest" barely
+means anything. Index: 98 MB for 50,000 chunks, 137 s to build over existing rows.
+
 The model itself: 141 ms to embed one question, and 1–10 chunks per second to embed documents on
 this CPU. A 300-page PDF (1,246 chunks) took about **7.5 minutes** from upload to searchable,
 against 8.5–10.3 s in v7. That broke v7's 5-minute "worker died" timeout, which the tests (small
@@ -708,7 +739,7 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
    `BrokenRepository` double broke in **both** v3 and v4 for the same structural reason: N
    implementations means N manual edits with no compiler help. mypy or Pyright would have caught
    all of them.
-7. *The test suite takes 1,378 seconds* (207 tests; 103 s in v4; 402 s in v7), and one timing-based rate-limit
+7. *The test suite takes 373–1,378 seconds* (209 tests in v9; 103 s in v4; 402 s in v7), and one timing-based rate-limit
    test fails when the machine is heavily loaded (4 bcrypt calls outlast the 15 s refill), which is
    approaching the point where it stops being run
    often enough to be useful. Both standard fixes cost something real: a lower bcrypt cost factor
@@ -735,10 +766,11 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
     anyone. Queue depth and the age of the oldest queued document are the first metrics needed.
     One worker processes documents in series; a document abandoned by a crashed worker waits
     5 minutes (without a heartbeat) before it is retried.
-16. *Semantic search reads every vector on every question.* 4.4 s at 10,000 chunks, 10.5 s at
-    50,000 (P50). Trigger for pgvector with an index (v9). It also never answers "nothing found",
-    so a relevance threshold is needed before generated answers (v10). Embedding runs at 1–10
-    chunks/s on this CPU, so large documents take minutes to become searchable.
+16. *Semantic search never answers "nothing found".* It always returns its closest chunks, so a
+    relevance threshold is needed before generated answers (v10). Its speed is fixed since v9
+    (147 ms at 50,000 chunks), but the index is approximate: recall must be re-measured on real
+    data. Embedding runs at 1–10 chunks/s on this CPU, so large documents take minutes to become
+    searchable.
 17. *Search cost grows with the number of matching chunks*, not with `limit` — v3's problem, inside
     the database. Bounded (108 ms at 39,588 chunks, worst case), not flat.
 18. *Original files are not kept* — no re-extraction, no download

@@ -21,7 +21,7 @@ from sqlalchemy import func, select, update
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.documents.chunking import Chunk
-from app.documents.embeddings import EmbeddingUnavailable, from_bytes
+from app.documents.embeddings import EmbeddingUnavailable
 from app.documents.models import Document, DocumentChunk, DocumentFile
 from app.documents import processing
 from app.documents.processing import (
@@ -151,7 +151,7 @@ def test_every_chunk_is_saved_with_its_embedding(tickets_client):
     assert row(document_id).embedding_model == settings.embedding_model
     assert len(chunks) > 1
     for chunk in chunks:
-        vector = from_bytes(chunk.embedding)
+        vector = np.array(chunk.embedding)
         assert vector.shape == (384,)
         # Normalised: length 1, so a dot product is a cosine similarity.
         assert abs(float(np.linalg.norm(vector)) - 1.0) < 1e-4

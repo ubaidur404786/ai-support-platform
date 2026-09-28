@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="960" viewBox="0 0 1040 960" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c62828"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="960" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v9 — Vector search inside PostgreSQL (pgvector + HNSW index)</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: v8 copied EVERY vector of the organisation into Python for each question — 10.5 s P50 at 50,000 chunks (the maths was 36 ms).</text>
+  <text x="30" y="74" fill="#1565c0">FIX: store vectors in a pgvector column; PostgreSQL compares them itself and walks an HNSW index; only the best 5 rows leave the database.</text>
+
+  <!-- Left: the search path -->
+  <rect x="20" y="92" width="500" height="520" rx="8" fill="none" stroke="#1565c0" stroke-dasharray="5,4"/>
+  <text x="34" y="112" font-size="12" font-weight="bold" fill="#1565c0" letter-spacing="1">API PROCESS — GET /documents/search?mode=semantic</text>
+
+  <rect x="40" y="124" width="460" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="143" font-weight="bold" fill="#222" font-size="12">router.py → service.py (unchanged since v8)</text>
+  <text x="52" y="160" fill="#666" font-size="10">q="Can I get my money back?" → embeddings.py → [0.02, −0.11, … 384 numbers]</text>
+  <line x1="270" y1="168" x2="270" y2="188" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="190" width="460" height="120" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="209" font-weight="bold" fill="#222" font-size="12">repository.py — semantic_search (rewritten)</text>
+  <text x="52" y="228" fill="#333" font-size="11" font-family="Consolas, monospace">SET LOCAL hnsw.iterative_scan = strict_order</text>
+  <text x="52" y="244" fill="#333" font-size="11" font-family="Consolas, monospace">SET LOCAL hnsw.ef_search = 100</text>
+  <text x="52" y="260" fill="#333" font-size="11" font-family="Consolas, monospace">SELECT … , embedding &lt;=&gt; :question AS distance</text>
+  <text x="52" y="276" fill="#333" font-size="11" font-family="Consolas, monospace"> WHERE organization_id = :org AND embedding_model = :m</text>
+  <text x="52" y="292" fill="#333" font-size="11" font-family="Consolas, monospace"> ORDER BY distance LIMIT 5</text>
+  <line x1="270" y1="310" x2="270" y2="330" stroke="#1565c0" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+  <text x="280" y="325" fill="#1565c0" font-size="10">384 numbers in, 5 rows out</text>
+
+  <rect x="40" y="332" width="460" height="128" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="351" font-weight="bold" fill="#222" font-size="12">PostgreSQL 17 + pgvector 0.8.6 (docker/postgres/Dockerfile, new)</text>
+  <text x="52" y="370" fill="#333" font-size="11">document_chunks.embedding  vector(384)   (was bytea in v8)</text>
+  <text x="52" y="387" fill="#333" font-size="11">ix_document_chunks_embedding  HNSW, vector_cosine_ops, m=16</text>
+  <text x="52" y="404" fill="#666" font-size="10">HNSW = a graph linking each vector to its near neighbours. The search starts at an</text>
+  <text x="52" y="418" fill="#666" font-size="10">entry point and keeps stepping towards the question: it visits hundreds of vectors,</text>
+  <text x="52" y="432" fill="#666" font-size="10">not 50,000. APPROXIMATE: it can miss a true neighbour (recall measured below).</text>
+  <text x="52" y="450" fill="#666" font-size="10">Small organisations: the planner skips the index and compares every row (exact).</text>
+  <line x1="270" y1="460" x2="270" y2="480" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="482" width="460" height="54" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="501" font-weight="bold" fill="#222" font-size="12">200 {"mode": "semantic", "results": [ … ]}</text>
+  <text x="52" y="518" fill="#666" font-size="10">rank = 1 − cosine distance = cosine similarity (same score as v8)</text>
+
+  <text x="40" y="562" fill="#333" font-size="11">Worker (processing.py): unchanged flow — the chunk's vector is now written to the</text>
+  <text x="40" y="578" fill="#333" font-size="11">vector column; each insert also updates the HNSW graph.</text>
+  <text x="40" y="598" fill="#333" font-size="11">Migration e5f1a8c3d9b2: bytea → vector(384) (exact copy), then builds the index.</text>
+
+  <!-- Right: v8 vs v9 -->
+  <rect x="540" y="92" width="480" height="236" rx="8" fill="none" stroke="#999" stroke-dasharray="5,4"/>
+  <text x="554" y="112" font-size="12" font-weight="bold" fill="#555" letter-spacing="1">WHERE THE WORK HAPPENS (50,000 chunks)</text>
+
+  <rect x="556" y="124" width="448" height="84" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="568" y="143" font-weight="bold" fill="#c62828" font-size="12">v8: PostgreSQL → 77 MB → Python → NumPy</text>
+  <text x="568" y="162" fill="#333" font-size="11">read every vector 13,008 ms · score + sort 36 ms</text>
+  <text x="568" y="180" fill="#333" font-size="11">cost grows with the organisation, not with limit</text>
+  <text x="568" y="198" fill="#666" font-size="10">exact — the baseline the index is judged against</text>
+
+  <rect x="556" y="220" width="448" height="96" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="568" y="239" font-weight="bold" fill="#1565c0" font-size="12">v9: PostgreSQL computes the distance, walks the index</text>
+  <text x="568" y="258" fill="#333" font-size="11">only 5 rows cross the network</text>
+  <text x="568" y="276" fill="#333" font-size="11">exact in SQL (no index): 1.8–2.2 s — still reads every row</text>
+  <text x="568" y="294" fill="#333" font-size="11">HNSW index: 72–95 ms</text>
+  <text x="568" y="310" fill="#666" font-size="10">in-process P50, same laptop, same session</text>
+
+  <!-- Right: the filtering trap -->
+  <rect x="540" y="344" width="480" height="268" rx="8" fill="none" stroke="#999" stroke-dasharray="5,4"/>
+  <text x="554" y="364" font-size="12" font-weight="bold" fill="#555" letter-spacing="1">THE FILTERING TRAP (found by a test)</text>
+
+  <rect x="556" y="376" width="448" height="100" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="568" y="395" font-weight="bold" fill="#c62828" font-size="12">Default: take 40 candidates, THEN apply WHERE org = …</text>
+  <text x="568" y="414" fill="#333" font-size="11">Org 2 has 300 chunks near the question, org 1 has 3 far away.</text>
+  <text x="568" y="432" fill="#333" font-size="11">All 40 candidates belong to org 2 → org 1 gets 0 results,</text>
+  <text x="568" y="450" fill="#333" font-size="11">although it owns 3 chunks.</text>
+  <text x="568" y="467" fill="#666" font-size="10">tenant isolation still holds — it is a missing-results bug, not a leak</text>
+
+  <rect x="556" y="488" width="448" height="110" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="568" y="507" font-weight="bold" fill="#1565c0" font-size="12">Fix: hnsw.iterative_scan = strict_order</text>
+  <text x="568" y="526" fill="#333" font-size="11">the scan keeps walking until 5 rows pass the filter,</text>
+  <text x="568" y="544" fill="#333" font-size="11">still sorted by distance → org 1 gets its 3 chunks</text>
+  <text x="568" y="564" fill="#666" font-size="10">test_a_small_organisation_still_gets_its_results_from_the_index</text>
+  <text x="568" y="580" fill="#666" font-size="10">fails with 0 == 3 when the line is removed</text>
+
+  <!-- Measurements -->
+  <text x="20" y="642" font-size="12" font-weight="bold" fill="#555" letter-spacing="1">MEASUREMENTS (local Windows laptop, PostgreSQL in Docker, low free memory; same session unless noted)</text>
+
+  <rect x="20" y="654" width="320" height="120" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="32" y="673" font-weight="bold" fill="#222" font-size="12">Semantic search, 50,000 chunks, via API</text>
+  <text x="32" y="693" fill="#333" font-size="11">v8: 10,498 ms P50 (v8 session)</text>
+  <text x="32" y="711" fill="#333" font-size="11">v9: 147 ms P50 / 319 ms P95 (30 requests)</text>
+  <text x="32" y="729" fill="#333" font-size="11">keyword, same run: 149 ms P50</text>
+  <text x="32" y="747" fill="#666" font-size="10">includes embedding the question (~141 ms in v8)</text>
+  <text x="32" y="763" fill="#666" font-size="10">synthetic chunks with random vectors, limit=5</text>
+
+  <rect x="352" y="654" width="330" height="120" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="364" y="673" font-weight="bold" fill="#222" font-size="12">Recall@5: index vs exact</text>
+  <text x="364" y="693" fill="#333" font-size="11">ef_search          40     100    200</text>
+  <text x="364" y="711" fill="#333" font-size="11">real text, 12,000:  0.98   0.99   1.00</text>
+  <text x="364" y="729" fill="#333" font-size="11">random, 50,000:     0.13   0.27   0.42</text>
+  <text x="364" y="747" fill="#666" font-size="10">real: embedded paragraphs, 100 held-out questions</text>
+  <text x="364" y="763" fill="#666" font-size="10">random 384-d points have no near neighbours: worst case</text>
+
+  <rect x="694" y="654" width="326" height="120" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="706" y="673" font-weight="bold" fill="#222" font-size="12">The price of the index (50,000 chunks)</text>
+  <text x="706" y="693" fill="#333" font-size="11">index 98 MB, table 245 MB</text>
+  <text x="706" y="711" fill="#333" font-size="11">build over existing rows: 137 s</text>
+  <text x="706" y="729" fill="#333" font-size="11">insert 12,000 chunks with the index: 143 s</text>
+  <text x="706" y="747" fill="#666" font-size="10">maintenance_work_mem 64 MB ran out at 28,364 rows</text>
+  <text x="706" y="763" fill="#666" font-size="10">migration of the 50k database, total: 4 min</text>
+
+  <!-- Next limitation -->
+  <rect x="20" y="796" width="1000" height="140" rx="6" fill="#fff8e1" stroke="#f9a825" stroke-width="1.5"/>
+  <text x="32" y="818" font-weight="bold" fill="#8d6e00" font-size="13">NEXT LIMITATION</text>
+  <text x="32" y="840" fill="#333" font-size="12">• Retrieval is fast now, but it never says "nothing relevant": it always returns 5 chunks, even for questions the knowledge base cannot answer</text>
+  <text x="44" y="858" fill="#333" font-size="12">(v8 test: score &lt; 0.3). Generated answers (v10-rag) need a relevance threshold, chosen by measurement, before retrieved text becomes "facts".</text>
+  <text x="32" y="880" fill="#333" font-size="12">• Embedding throughput is still 1–10 chunks/s on this CPU: a 300-page PDF takes ~7.5 min to become searchable (v8).</text>
+  <text x="32" y="902" fill="#333" font-size="12">• Recall depends on the data: it must be re-measured on each organisation's real chunks, not assumed from the benchmark above.</text>
+  <text x="32" y="924" fill="#666" font-size="11">Proposed next: v10-rag — relevance threshold first, then a local model that answers only from retrieved chunks, with citations.</text>
+</svg>

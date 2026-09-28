@@ -1,6 +1,6 @@
 # ADR-024: Store vectors as bytes in PostgreSQL and compare them all in NumPy
 
-Status: accepted (v8). Expected to be replaced in v9. The measurement below is the trigger.
+Status: superseded in v9 by [ADR-025](ADR-025-pgvector-hnsw-index.md). Kept as the record of the exact baseline and of the measurement that triggered the change.
 
 ## Context
 

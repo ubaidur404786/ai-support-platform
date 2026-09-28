@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, settings
 from app.documents.chunking import chunk_text
-from app.documents.embeddings import embed_texts, to_bytes
+from app.documents.embeddings import embed_texts
 from app.documents.extraction import (
     DocumentTooLarge,
     UnreadableDocument,
@@ -204,7 +204,7 @@ def process_document(
             text=chunk.text,
             start_char=chunk.start,
             end_char=chunk.end,
-            embedding=to_bytes(vector),
+            embedding=vector,
         )
         # zip pairs each chunk with its vector: same order, same length.
         for chunk, vector in zip(chunks, vectors)
@@ -289,7 +289,7 @@ def embed_existing_document(session: Session, document: Document, app_settings: 
     )
     vectors = embed_texts([chunk.text for chunk in chunks], app_settings.embedding_model)
     for chunk, vector in zip(chunks, vectors):
-        chunk.embedding = to_bytes(vector)
+        chunk.embedding = vector
     document.embedding_model = app_settings.embedding_model
     session.commit()
     return len(chunks)

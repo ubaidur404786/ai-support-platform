@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 import numpy as np
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,10 @@ from app.core.errors import AlreadyExistsError, StorageError, translated_errors
 from app.documents.models import PROCESSING, QUEUED, Document, DocumentChunk, DocumentFile
 
 Match = Literal["any", "all"]
+
+# See semantic_search. A constant rather than a setting: changing it is a
+# decision to re-measure recall, not a deployment detail.
+HNSW_EF_SEARCH = 100
 
 
 @dataclass(frozen=True)
@@ -225,65 +229,54 @@ class PostgresDocumentRepository:
     ) -> list[SearchHit]:
         """The chunks whose meaning is closest to the question's.
 
-        Brute force, on purpose: read the embedding of EVERY chunk of the
-        organisation, compare each one with the question, keep the best. Exact,
-        and simple enough to check by hand - but its cost grows with the number
-        of chunks, not with `limit`. Measured in v8: fine for a knowledge base of
-        hundreds of chunks, ~10 s at 50,000 - almost all of it spent reading
-        77 MB of vectors out of PostgreSQL, not on the maths. An index built for
-        vectors (pgvector) is the fix (see ADR-024).
+        v8 read EVERY vector of the organisation into Python and compared them
+        there: exact, but ~10 s at 50,000 chunks, almost all of it spent copying
+        vectors out of the database (ADR-024). Since v9 PostgreSQL does the
+        comparing itself (pgvector), and for a large organisation it walks the
+        HNSW index instead of reading every row (ADR-025). Only the `limit`
+        winning rows ever leave the database.
         """
+        # <=> is pgvector's cosine DISTANCE: 0 = same direction, 2 = opposite.
+        # Similarity is 1 - distance, the same score v8 returned.
+        distance = DocumentChunk.embedding.cosine_distance(query_vector)
         with translated_errors(self._session):
+            # By default an HNSW scan collects 40 candidates (hnsw.ef_search) and
+            # only THEN applies the WHERE clause. If most of them belong to other
+            # organisations, the search returns fewer than `limit` results - or
+            # none. An iterative scan keeps walking the graph until enough rows
+            # pass the filter. strict_order keeps the results sorted by distance.
+            # SET LOCAL: only for this transaction, never leaks to other queries.
+            self._session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
+            # How many candidates the index keeps while it walks the graph. More =
+            # closer to the exact answer, a little slower. Measured in v9: 40 (the
+            # default) found 98% of the true top 5 on real text, 100 found 99%,
+            # for the same ~60 ms.
+            self._session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
             rows = self._session.execute(
-                select(DocumentChunk.id, DocumentChunk.embedding)
+                select(
+                    DocumentChunk.document_id,
+                    Document.title,
+                    DocumentChunk.chunk_index,
+                    DocumentChunk.text,
+                    distance.label("distance"),
+                )
                 .join(Document, Document.id == DocumentChunk.document_id)
                 # The tenant filter, on the chunk itself - as in keyword search.
                 .where(DocumentChunk.organization_id == organization_id)
                 # Only vectors made by the model that embedded the question.
                 .where(Document.embedding_model == model_name)
-                .where(DocumentChunk.embedding.is_not(None))
-                .order_by(DocumentChunk.id)
+                # Sorting by the distance alone is what lets PostgreSQL use the
+                # index; adding a second sort key would switch it off.
+                .order_by(distance)
+                .limit(limit)
             ).all()
-        if not rows:
-            return []
-
-        chunk_ids = [row.id for row in rows]
-        # All vectors side by side: one row per chunk, 384 columns.
-        matrix = np.frombuffer(b"".join(row.embedding for row in rows), dtype=np.float32)
-        matrix = matrix.reshape(len(rows), -1)
-        # Every vector has length 1, so each dot product is a cosine similarity.
-        # One matrix-vector product scores every chunk at once.
-        scores = matrix @ query_vector
-        # Highest score first. "stable" keeps chunk-id order for equal scores.
-        best = np.argsort(-scores, kind="stable")[:limit]
-
-        # Second query: text and title for the few winners only, instead of
-        # reading the text of every chunk just to throw most of it away.
-        top_ids = [chunk_ids[i] for i in best]
-        with translated_errors(self._session):
-            details = {
-                row.id: row
-                for row in self._session.execute(
-                    select(
-                        DocumentChunk.id,
-                        DocumentChunk.document_id,
-                        Document.title,
-                        DocumentChunk.chunk_index,
-                        DocumentChunk.text,
-                    )
-                    .join(Document, Document.id == DocumentChunk.document_id)
-                    .where(DocumentChunk.id.in_(top_ids))
-                )
-            }
         return [
             SearchHit(
-                document_id=details[chunk_ids[i]].document_id,
-                document_title=details[chunk_ids[i]].title,
-                chunk_index=details[chunk_ids[i]].chunk_index,
-                text=details[chunk_ids[i]].text,
-                rank=float(scores[i]),
+                document_id=row.document_id,
+                document_title=row.title,
+                chunk_index=row.chunk_index,
+                text=row.text,
+                rank=1 - float(row.distance),
             )
-            for i in best
-            # A chunk deleted between the two queries is simply left out.
-            if chunk_ids[i] in details
+            for row in rows
         ]

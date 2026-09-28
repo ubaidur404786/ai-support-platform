@@ -33,6 +33,7 @@ narwhals==2.26.0
 numpy==2.5.3
 onnxruntime==1.30.0
 packaging==26.3
+pgvector==0.5.0
 pillow==12.3.0
 pluggy==1.6.0
 protobuf==7.36.2

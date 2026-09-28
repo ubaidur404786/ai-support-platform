@@ -13,13 +13,18 @@ into EMBEDDING_CACHE_DIR; after that no network is needed.
 import logging
 from functools import lru_cache
 
-# NumPy stores the vectors as compact arrays of numbers and does the maths on
-# them - comparing a question with thousands of chunks is one matrix product.
+# NumPy stores the vectors as compact arrays of numbers.
 import numpy as np
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# How many numbers the model returns per text. The database column is declared
+# with this size (pgvector checks it on every insert), so a different model with
+# a different size needs a migration, not just a new EMBEDDING_MODEL setting.
+EMBEDDING_DIMENSIONS = 384
 
 
 class EmbeddingUnavailable(Exception):
@@ -51,7 +56,7 @@ def embed_texts(texts: list[str], model_name: str = settings.embedding_model) ->
 
     Every vector has length 1 (the model normalises it). For vectors of length
     1, the dot product of two vectors IS their cosine similarity: 1.0 = same
-    meaning, around 0 = unrelated. That keeps the search maths to one product.
+    meaning, around 0 = unrelated.
     """
     if not texts:
         return np.zeros((0, 0), dtype=np.float32)
@@ -65,17 +70,3 @@ def embed_texts(texts: list[str], model_name: str = settings.embedding_model) ->
         # what that means: 503 for a search, a retry for the worker.
         raise EmbeddingUnavailable(f"Embedding model {model_name!r} is unavailable") from error
     return vectors.astype(np.float32)
-
-
-# How a vector is stored in PostgreSQL: its 384 float32 numbers packed into
-# 384 x 4 = 1,536 bytes (a BYTEA column). Reading them back is a memory copy,
-# not a conversion of 384 separate numbers - that matters when a search reads
-# every chunk of an organisation.
-
-
-def to_bytes(vector: np.ndarray) -> bytes:
-    return vector.astype(np.float32).tobytes()
-
-
-def from_bytes(data: bytes) -> np.ndarray:
-    return np.frombuffer(data, dtype=np.float32)

@@ -31,3 +31,4 @@ pypdf>=5.0                # Extracts text from PDF files; pure Python, no system
 
 # --- Embeddings ------------------------------------------------------------
 fastembed>=0.5            # Runs a local embedding model (text -> vector of meaning) with ONNX Runtime; no PyTorch
+pgvector>=0.4             # Lets SQLAlchemy read and write PostgreSQL vector columns (the pgvector extension)

@@ -26,7 +26,13 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
+# pgvector adds a "vector" column type to PostgreSQL (and this package teaches
+# SQLAlchemy about it): a fixed-size list of numbers the database itself can
+# compare, sort by distance, and index.
+from pgvector.sqlalchemy import Vector
+
 from app.core.database import Base
+from app.documents.embeddings import EMBEDDING_DIMENSIONS
 
 
 def _now() -> datetime:
@@ -181,10 +187,17 @@ class DocumentChunk(Base):
         TSVECTOR, Computed("to_tsvector('english', text)", persisted=True)
     )
 
-    # The chunk's meaning as 384 numbers, packed into bytes (see embeddings.py).
-    # Written by the worker together with the chunk. NULL only for chunks
-    # created before v8 and not yet backfilled.
-    embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # The chunk's meaning as 384 numbers (see embeddings.py). Written by the
+    # worker together with the chunk. NULL only for chunks created before v8 and
+    # not yet backfilled.
+    #
+    # v8 stored these as raw bytes, which only Python could understand, so every
+    # search had to copy every vector out of the database (ADR-024). Since v9 it
+    # is a pgvector column: PostgreSQL computes the distances itself and can use
+    # the index below (ADR-025).
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(EMBEDDING_DIMENSIONS), nullable=True
+    )
 
     __table_args__ = (
         # GIN ("generalised inverted index") maps each word to the rows that
@@ -192,5 +205,22 @@ class DocumentChunk(Base):
         # would read every chunk.
         Index(
             "ix_document_chunks_search_vector", "search_vector", postgresql_using="gin"
+        ),
+        # HNSW ("hierarchical navigable small world"): a graph linking each
+        # vector to its near neighbours. A search starts at an entry point and
+        # keeps stepping to the neighbour closest to the question, so it visits
+        # a few hundred vectors instead of all of them. The price: it is
+        # APPROXIMATE - it can miss a true nearest neighbour (measured in v9).
+        #
+        # vector_cosine_ops: the index is built for cosine distance, the <=>
+        # operator. A query sorting by another operator cannot use it.
+        # m / ef_construction: pgvector's defaults, written out so they are
+        # visible (links per vector / effort while building).
+        Index(
+            "ix_document_chunks_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )

@@ -4,7 +4,10 @@
 
 services:
   db:
-    image: postgres:17-alpine
+    # PostgreSQL 17 on Alpine plus pgvector (v9), built from docker/postgres.
+    # Rebuild after changing that Dockerfile:  docker compose build db
+    build: docker/postgres
+    image: ai-support-db:pg17-pgvector
     container_name: ai-support-db
     environment:
       # Local development credentials only. Real deployments take these from

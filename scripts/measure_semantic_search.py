@@ -8,8 +8,10 @@ Part 1, in-process (no HTTP, no database):
 Part 2, through the running API: search latency for mode=keyword and
 mode=semantic as the organisation grows from 1,000 to 50,000 chunks. The chunks
 are synthetic and inserted straight into the database with random (but
-correctly normalised) vectors: semantic search does the same work whatever the
-numbers are, and embedding 50,000 real chunks would take many minutes.
+correctly normalised) vectors, because embedding 50,000 real chunks would take
+hours on a laptop CPU. v8's brute force did the same work whatever the numbers
+were. The v9 index does not: random vectors have no clusters, which is the
+hardest case for it - see scripts/measure_vector_index.py for its recall.
 
 Start the API first, against the database this script will fill:
     DB_ECHO=false uvicorn app.main:app
@@ -35,7 +37,7 @@ from app.auth.models import User  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.database import SessionLocal  # noqa: E402
 from app.documents import embeddings  # noqa: E402
-from app.documents.embeddings import embed_texts, to_bytes  # noqa: E402
+from app.documents.embeddings import embed_texts  # noqa: E402
 from app.documents.models import READY, Document, DocumentChunk  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:8000"
@@ -137,7 +139,7 @@ def add_chunks(organization_id: int, how_many: int, rng: random.Random) -> None:
                         "text": chunk_text(rng),
                         "start_char": 0,
                         "end_char": 800,
-                        "embedding": to_bytes(vectors[i]),
+                        "embedding": vectors[i],
                     }
                     for i in range(batch)
                 ],
