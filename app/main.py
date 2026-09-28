@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.answers.router import router as answers_router
 from app.auth.router import router as auth_router
 from app.classification.classifier import TicketClassifier
 from app.classification.router import router as classification_router
@@ -54,6 +55,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         rate_limiters["ingestion"] = per_minute(
             app_settings.ingestion_rate_limit_per_minute
         )
+        rate_limiters["answers"] = per_minute(app_settings.answer_rate_limit_per_minute)
     app.state.rate_limiters = rate_limiters
 
     # The largest legitimate request is a document upload. Anything bigger is
@@ -67,6 +69,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
     app.include_router(classification_router)
     app.include_router(tickets_router)
     app.include_router(documents_router)
+    app.include_router(answers_router)
     return app
 
 

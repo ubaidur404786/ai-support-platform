@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.9.0"
+    app_version: str = "0.10.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -105,6 +105,29 @@ class Settings(BaseSettings):
     # like the trained classifier. The default would be the system temp folder,
     # which the OS may clear - and then the next start downloads it again.
     embedding_cache_dir: str = "models/embeddings"
+
+    # Generated answers (v10). A small instruction-following language model,
+    # run on the CPU by llama.cpp from one GGUF file (a model packed into a
+    # single, compressed file). Downloaded by scripts/download_generation_model.py.
+    # Qwen2.5-1.5B-Instruct (~1.1 GB). The 0.5B version (~490 MB, the same file
+    # name with 0.5b) is faster but invented answers - a price, a "Merge"
+    # button - for 4 of 20 unanswerable questions, against 1 for 1.5B (v10).
+    generation_model_path: str = "models/generation/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+    # The lowest search score (cosine similarity) a chunk needs to be shown to
+    # the model. Below it for every chunk, the answer is "not found" and the
+    # model is never called. Chosen by scripts/choose_relevance_threshold.py:
+    # 0.30 kept 93% of answerable questions and refused 90% of unanswerable ones
+    # on the held-out half. A different embedding model needs a new measurement.
+    answer_relevance_threshold: float = 0.30
+    # At most this many chunks go into the prompt. More context = slower answers
+    # on a CPU, and more chances to mix up two articles.
+    answer_max_sources: int = 3
+    # Upper bound on the answer's length, in tokens (roughly 3/4 of a word each).
+    # Generation time grows with it, so it caps the work one request can cause.
+    answer_max_tokens: int = 200
+    # POST /answers per user. Its own budget: one answer costs seconds of CPU,
+    # about a thousand times a /classify call.
+    answer_rate_limit_per_minute: int = 10
 
     # Read a .env file if present; real environment variables take priority over it.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

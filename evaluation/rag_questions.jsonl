@@ -1,0 +1,50 @@
+{"question": "How long does a refund take?", "answerable": true, "expected_document": "refund-policy.md", "expected_facts": ["five to ten business days", "5 to 10", "5-10", "ten business days"], "split": "tune"}
+{"question": "How do I reset my password?", "answerable": true, "expected_document": "reset-password.md", "expected_facts": ["forgot password"], "split": "test"}
+{"question": "How do I enable two-factor authentication?", "answerable": true, "expected_document": "two-factor-authentication.md", "expected_facts": ["Profile > Security", "QR code", "authenticator app"], "split": "tune"}
+{"question": "Where can I download my invoices?", "answerable": true, "expected_document": "invoices-and-receipts.md", "expected_facts": ["Invoice history"], "split": "test"}
+{"question": "How do I invite teammates?", "answerable": true, "expected_document": "team-members-invite.md", "expected_facts": ["Settings > Members"], "split": "tune"}
+{"question": "Which browsers are supported?", "answerable": true, "expected_document": "supported-browsers.md", "expected_facts": ["Chrome", "Firefox"], "split": "test"}
+{"question": "What is the maximum attachment size?", "answerable": true, "expected_document": "file-upload-limits.md", "expected_facts": ["25 MB", "25MB"], "split": "tune"}
+{"question": "How do I create an API key?", "answerable": true, "expected_document": "api-keys.md", "expected_facts": ["Developers"], "split": "test"}
+{"question": "How do I export my data as CSV?", "answerable": true, "expected_document": "data-export.md", "expected_facts": ["Settings > Data"], "split": "tune"}
+{"question": "How do I cancel my subscription?", "answerable": true, "expected_document": "cancel-subscription.md", "expected_facts": ["Cancel subscription", "Settings > Billing"], "split": "test"}
+{"question": "When is the support team available?", "answerable": true, "expected_document": "contact-support.md", "expected_facts": ["Monday to Friday", "08:00"], "split": "tune"}
+{"question": "How do I upgrade my plan?", "answerable": true, "expected_document": "plan-upgrade-downgrade.md", "expected_facts": ["Change plan"], "split": "test"}
+{"question": "Is my data encrypted at rest?", "answerable": true, "expected_document": "data-security.md", "expected_facts": ["AES-256", "AES"], "split": "tune"}
+{"question": "Where is the status page for outages?", "answerable": true, "expected_document": "service-status.md", "expected_facts": ["status.example.com"], "split": "test"}
+{"question": "Why does the API return 429 Too Many Requests?", "answerable": true, "expected_document": "api-rate-limits.md", "expected_facts": ["600"], "split": "tune"}
+{"question": "Can I get my money back?", "answerable": true, "expected_document": "refund-policy.md", "expected_facts": ["30 days", "Refund request", "five to ten", "annual"], "split": "test"}
+{"question": "I forgot my login details", "answerable": true, "expected_document": "reset-password.md", "expected_facts": ["forgot password"], "split": "tune"}
+{"question": "The six digit number from my phone app is not accepted", "answerable": true, "expected_document": "two-factor-authentication.md", "expected_facts": ["backup code"], "split": "test"}
+{"question": "How do I stop being charged every month?", "answerable": true, "expected_document": "cancel-subscription.md", "expected_facts": ["Cancel subscription", "Settings > Billing"], "split": "tune"}
+{"question": "My card expired, how do I put in a new one?", "answerable": true, "expected_document": "change-billing-details.md", "expected_facts": ["Payment method", "Replace"], "split": "test"}
+{"question": "Can a colleague get access to our account?", "answerable": true, "expected_document": "team-members-invite.md", "expected_facts": ["Settings > Members", "invit"], "split": "tune"}
+{"question": "How can I make someone an admin?", "answerable": true, "expected_document": "roles-and-permissions.md", "expected_facts": ["Settings > Members"], "split": "test"}
+{"question": "I want you to forget everything you know about me", "answerable": true, "expected_document": "privacy-requests.md", "expected_facts": ["privacy@example.com"], "split": "tune"}
+{"question": "Can I close our company account for good?", "answerable": true, "expected_document": "delete-account.md", "expected_facts": ["Delete workspace", "Settings > Advanced"], "split": "test"}
+{"question": "Your website is not loading, is it down for everyone?", "answerable": true, "expected_document": "service-status.md", "expected_facts": ["status.example.com"], "split": "tune"}
+{"question": "Is there a cap on how often my integration can call you?", "answerable": true, "expected_document": "api-rate-limits.md", "expected_facts": ["600"], "split": "test"}
+{"question": "How can I get all our tickets into a spreadsheet?", "answerable": true, "expected_document": "data-export.md", "expected_facts": ["CSV"], "split": "tune"}
+{"question": "Edits on my phone don't show up on my laptop", "answerable": true, "expected_document": "mobile-app-sync.md", "expected_facts": ["pull down", "force a sync", "latest version"], "split": "test"}
+{"question": "Who at your company can look at our information?", "answerable": true, "expected_document": "data-security.md", "expected_facts": ["operations team"], "split": "tune"}
+{"question": "When can I talk to a human?", "answerable": true, "expected_document": "contact-support.md", "expected_facts": ["Monday to Friday", "08:00", "chat"], "split": "test"}
+{"question": "Do you offer a discount for students or non-profits?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "Can I pay with PayPal?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "Is there a desktop app for Linux?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "How do I change the language of the app to German?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "Can I merge two tickets into one?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "Do you integrate with Salesforce?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "What is the price of the Team plan?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "How do I set up automatic replies to customers?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "Can I use my own domain for the help center?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "Is there a dark mode?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "How do I change my profile picture?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "Can I schedule a report to be emailed every week?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "Where is your office located?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "Do you have an affiliate or referral program?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "How many API keys can I create?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "Is there an on-premise version I can host myself?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "What is the capital of France?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "Who won the football World Cup in 2022?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}
+{"question": "Write me a poem about the sea", "answerable": false, "expected_document": null, "expected_facts": [], "split": "tune"}
+{"question": "How do I bake sourdough bread?", "answerable": false, "expected_document": null, "expected_facts": [], "split": "test"}

@@ -121,3 +121,16 @@ def limit_ingestion(
     out of classifying tickets.
     """
     enforce(request, "ingestion", f"user:{current_user.id}")
+
+
+def limit_answers(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Budget for generated answers, per user.
+
+    Separate from inference: one answer runs a language model for seconds,
+    one classification takes ~2 ms. Sharing a budget would let either one
+    starve the other.
+    """
+    enforce(request, "answers", f"user:{current_user.id}")

@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v9 — Vector search inside PostgreSQL** (branch `v9-vector-search`)
+**Current version: v10 — RAG: answers written from the knowledge base** (branch `v10-rag`)
 
 ## 1. Project Overview
 
@@ -16,7 +16,7 @@ The engineering goal is a production-style AI system whose every component can b
 what problem forced it in, what it costs, and what happens when it fails. The architecture
 history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
 `v3-pagination`, `v4-authentication`, `v5-rate-limiting`, `v6-document-ingestion`,
-`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, ...)
+`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, `v10-rag`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -42,13 +42,13 @@ a human steps in where the model is unsure rather than everywhere.
 | Documents processed in a background worker; uploads answer 202 and report `queued / processing / ready / failed` | Available | v7 |
 | Meaning-based search: every chunk embedded locally (all-MiniLM-L6-v2), `mode=semantic`; paraphrase hit@3 0.47 → 0.87 | Available | v8 |
 | Vector search in PostgreSQL (pgvector, HNSW index): 147 ms at 50,000 chunks, recall@5 0.99 on real text | Available | v9 |
-| Retrieval-augmented answers, with a relevance threshold | Planned | — |
+| Retrieval-augmented answers (`POST /answers`): local Qwen2.5-1.5B via llama.cpp, a measured relevance threshold, sources with every answer; 0.95 of unanswerable questions refused | Available | v10 |
 | Controlled actions (create / update tickets) with human approval | Planned | — |
 | Model evaluation, monitoring, and safe rollout | Planned | — |
 
 ## 4. Current Architecture
 
-![v9 architecture](docs/architecture/v9.svg)
+![v10 architecture](docs/architecture/v10.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
@@ -60,7 +60,9 @@ with a full-text index. Since v7 that processing happens in a separate **worker 
 is the job queue. Since v8 the worker also turns every chunk into an **embedding** (384 numbers
 from a small local model run by ONNX Runtime), and search can compare meaning instead of words
 (`mode=semantic`). Since v9 those vectors live in a **pgvector** column, and PostgreSQL finds the
-nearest ones itself through an HNSW index. No cache, broker or external service yet.
+nearest ones itself through an HNSW index. Since v10, `POST /answers` turns the closest chunks into
+a short answer with a small local language model (llama.cpp, CPU), and refuses when nothing
+relevant was found. No cache, broker or external service yet.
 
 ```
 app/
@@ -79,6 +81,13 @@ app/
 ```
 
 ## 5. Request Flow
+
+`POST /answers` (v10): token → `limit_answers` (10 per minute per user) → semantic search, 3 chunks →
+keep chunks scoring ≥ 0.30; none left → `answered: false`, **without calling the model** (~0.12 s) →
+otherwise the model answers from those chunks only (~7 s on this CPU, one answer at a time per
+process) → a reply of "I don't know" also becomes `answered: false`. The response always lists the
+chunks the model saw as numbered `sources`. The model cannot be loaded → **503** "try GET
+/documents/search?mode=semantic".
 
 `POST /tickets`:
 
@@ -198,8 +207,25 @@ measure on real data ([ADR-025](docs/adr/ADR-025-pgvector-hnsw-index.md)).
 The model is downloaded once (~90 MB) into `models/embeddings` and runs offline after that
 ([ADR-023](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md)). `embedding_model` plays
 the role `model_version` plays for tickets: vectors from different models are never compared.
-Semantic search always returns its closest chunks, even for questions nothing answers. A
-relevance threshold has to exist before retrieved text feeds generated answers.
+Semantic search always returns its closest chunks, even for questions nothing answers.
+
+Answers (v10):
+
+```
+question → semantic search (3 chunks) → score ≥ 0.30 ? ──no──▶ "not found" (model not called)
+                                              │yes
+         prompt: "use ONLY the context … else reply exactly: I don't know" + chunks + question
+                                              ▼
+         Qwen2.5-1.5B-Instruct, 4-bit GGUF, llama.cpp, CPU, temperature 0
+                                              ▼
+         "I don't know"? → "not found"   else → answer + numbered sources
+```
+
+The threshold was chosen on half of 50 questions and checked on the other half
+([ADR-028](docs/adr/ADR-028-relevance-threshold-before-generation.md)). The model was chosen over a
+0.5B one because it invented far fewer answers to unanswerable questions (1 vs 4 of 20)
+([ADR-027](docs/adr/ADR-027-local-rag-with-llama-cpp.md)). The model file (~1.1 GB) lives in
+`models/generation`.
 
 ## 7. Data Flow
 
@@ -242,6 +268,7 @@ the model file and its metrics are produced at training time.
 | Search | PostgreSQL full-text search (`tsvector`, GIN, `ts_rank`) | Stemming and ranking in the database we already run; the baseline embeddings must beat — see [ADR-018](docs/adr/ADR-018-postgres-full-text-search-baseline.md) |
 | Embeddings | `fastembed` (ONNX Runtime) running `all-MiniLM-L6-v2` on the CPU; NumPy | Local and free; same vectors as sentence-transformers without PyTorch (import 21–25 s vs 90–150 s here) — see [ADR-023](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md) |
 | Vector search | pgvector 0.8.6: `vector(384)` column, HNSW index (cosine), `pgvector` Python package | 10.5 s → 147 ms at 50,000 chunks; vectors, text and tenant filter in one query, no second datastore — see [ADR-025](docs/adr/ADR-025-pgvector-hnsw-index.md) (v8's exact baseline: [ADR-024](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md)) and [ADR-026](docs/adr/ADR-026-build-pgvector-into-the-alpine-image.md) |
+| Generation | `llama-cpp-python` (llama.cpp) running Qwen2.5-1.5B-Instruct, 4-bit GGUF, on the CPU | Local and free, one package and one file, no extra service; releases the GIL — see [ADR-027](docs/adr/ADR-027-local-rag-with-llama-cpp.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
 
@@ -250,10 +277,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v9 — Vector search inside PostgreSQL.** See
-[docs/versions/v9-vector-search.md](docs/versions/v9-vector-search.md) for the full
+**v10 — RAG: answers written from the knowledge base.** See
+[docs/versions/v10-rag.md](docs/versions/v10-rag.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v9-vector-search/README.md](docs/versions/v9-vector-search/README.md) for
+[docs/versions/v10-rag/README.md](docs/versions/v10-rag/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -270,7 +297,8 @@ a short guide.
 | v7 | `v7-async-processing` | Extraction ran inside the upload request (300-page PDF ~8 s) and, through the GIL, slowed every other request (`/health` P50 15 ms → 335–729 ms) | Complete |
 | v8 | `v8-embeddings` | Keyword search misses paraphrased questions (hit@3 0.47, 20% empty) | Complete |
 | v9 | `v9-vector-search` | Semantic search reads every vector per question: 10.5 s P50 at 50,000 chunks, of which the maths is 36 ms | Complete |
-| v10 | `v10-rag` | Retrieval always returns results, even when nothing is relevant — a measured relevance threshold is needed before generated answers | Next (proposed) |
+| v10 | `v10-rag` | Search returns passages, never answers, and never says "nothing relevant" | Complete |
+| v11 | `v11-hybrid-retrieval` | For 20% of answerable questions the right article is not among the answer's sources; keyword search is 1.00 on lexical questions | Next (proposed) |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -279,12 +307,13 @@ authentication did not. Old branches remain on GitHub as engineering history.
 The whole chain in one picture — the problem that forced each version, what changed, and what was
 measured afterwards:
 
-![Architecture evolution, v0 to v9](docs/architecture/evolution.svg)
+![Architecture evolution, v0 to v10](docs/architecture/evolution.svg)
 
 Carried forward, measured but not yet fixed: `total` still costs more than the page it
 accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
 rate-limit buckets live in one process, so every extra worker multiplies the limits; semantic
-search never says "nothing relevant", and its index is approximate; embedding is slow on a CPU; nothing alerts anyone when
+retrieval misses the right article for 20% of answerable questions; answers take ~7 s and run one
+at a time; wrong answers are not detected at runtime; embedding is slow on a CPU; nothing alerts anyone when
 the document worker stops.
 
 ## 11. How to Run
@@ -314,6 +343,13 @@ the embedding model (~90 MB) into `models/embeddings`:
 
 ```bash
 python -m app.worker
+```
+
+For `POST /answers`, download the language model once (~1.1 GB into `models/generation`; check
+the free disk space first):
+
+```bash
+python scripts/download_generation_model.py
 ```
 
 Interactive API docs: http://127.0.0.1:8000/docs
@@ -359,6 +395,10 @@ Configuration (environment variables or `.env`, see `.env.example`):
 | `MAX_PENDING_DOCUMENTS_PER_ORGANIZATION` | `50` | Queue ceiling per organisation; above it uploads get 429 |
 | `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model; changing it requires `scripts/embed_existing_documents.py` |
 | `EMBEDDING_CACHE_DIR` | `models/embeddings` | Where the downloaded model is kept |
+| `GENERATION_MODEL_PATH` | `models/generation/qwen2.5-1.5b-instruct-q4_k_m.gguf` | The answer model file |
+| `ANSWER_RELEVANCE_THRESHOLD` | `0.30` | Minimum chunk score to be shown to the model; measured, re-measure after changing the embedding model |
+| `ANSWER_MAX_SOURCES` / `ANSWER_MAX_TOKENS` | `3` / `200` | Chunks per prompt / answer length cap |
+| `ANSWER_RATE_LIMIT_PER_MINUTE` | `10` | `POST /answers` per user, its own budget |
 | `LOG_LEVEL` | `INFO` | Python logging level |
 
 Documents processed before v8 have no embeddings; semantic search ignores them until:
@@ -382,7 +422,7 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-209 tests, 373 seconds in the v9 session (under memory pressure); 207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
+218 tests, 443 seconds in the v10 session, with the real answer model; 209 tests, 373 seconds in the v9 session (under memory pressure); 207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
 
 - **Document pipeline, no HTTP and no database** (29 tests) — chunks never exceed the maximum;
   offsets point at the exact text; **no character of the document is lost**; neighbours overlap;
@@ -405,6 +445,12 @@ pytest -v
   (checked with PostgreSQL's own scan counter; fails if the query sorts by another distance), and
   a small organisation sharing the index with a large one still gets its results (fails with
   `0 == 3` without the iterative scan).
+- **Answers** (9 tests, v10) — mostly with a fake model that records what it is sent: the retrieved
+  chunks reach the prompt; chunks below the threshold do not; an unrelated question is "not found"
+  **without calling the model**; "I don't know" becomes "not found" with sources kept; another
+  organisation's documents never reach the model; a missing model → 503 while search works; input
+  bounds and a token; a separate rate limit. One test runs the real model end to end (skipped if it
+  is not downloaded).
 - **Worker** (17 tests) — oldest first; **two workers never take the same document** (SKIP
   LOCKED, with a real second session holding the lock); a failure while saving leaves no chunks
   and requeues; repeated failures end in `failed`; a document deleted mid-processing is discarded;
@@ -501,6 +547,23 @@ phone app is not accepted" (two-factor authentication) and "Can I close our comp
 good?" (delete account). "0% returned nothing" is not purely good news: semantic search *always*
 returns something, including for questions the knowledge base cannot answer.
 
+### Answers (v10): RAG on answerable and unanswerable questions
+
+`evaluation/rag_questions.jsonl`: 30 answerable questions (the 30 above, each with the fact a right
+answer must contain) and 20 the knowledge base cannot answer (16 close to the product, such as
+"Can I pay with PayPal?", and 4 off-topic). `scripts/evaluate_rag.py`, through the API:
+
+| | 0.5B | **1.5B (chosen)** |
+|---|---|---|
+| Answerable: correct (expected fact in the answer) | 0.70 | **0.70** |
+| Answerable: right article among the sources | 0.80 | 0.80 |
+| Unanswerable: refused | 0.80 | **0.95** |
+| Unanswerable: hallucinated | 0.20 | **0.05** |
+
+Full results, every answer included: `evaluation/results/v10-rag.json`. "Correct" is a string check,
+so it can miss a right answer worded differently. Wrong answers still occur: "No." to "Can I close
+our company account for good?".
+
 ## 14. Architecture Decisions
 
 - [ADR-001 — Classical ML model as the baseline classifier](docs/adr/ADR-001-classical-ml-baseline-classifier.md)
@@ -529,6 +592,8 @@ returns something, including for questions the knowledge base cannot answer.
 - [ADR-024 — Store vectors as bytes and compare them all in NumPy](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md) (superseded in v9)
 - [ADR-025 — Search vectors inside PostgreSQL with pgvector and an HNSW index](docs/adr/ADR-025-pgvector-hnsw-index.md)
 - [ADR-026 — Build pgvector into our own PostgreSQL Alpine image](docs/adr/ADR-026-build-pgvector-into-the-alpine-image.md)
+- [ADR-027 — Generate answers locally with a small model run by llama.cpp](docs/adr/ADR-027-local-rag-with-llama-cpp.md)
+- [ADR-028 — Refuse before generating: a measured relevance threshold](docs/adr/ADR-028-relevance-threshold-before-generation.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -688,6 +753,12 @@ Recall@5 of the index against exact search: 0.98 / **0.99** / 1.00 (`ef_search` 
 200) on 12,000 real text paragraphs; 0.13 / 0.27 / 0.42 on random vectors, where "nearest" barely
 means anything. Index: 98 MB for 50,000 chunks, 137 s to build over existing rows.
 
+**v10 — answers**, one API process, CPU only, 1.5B model: **7.4 s P50** (13.7 s max) when the model
+runs, **0.12 s** when the threshold refuses. Two different questions sent together took 6.5 s and
+**12.4 s**: a lock makes them take turns, because one model object cannot serve two threads. Other
+endpoints are not slowed: `/health` was 21 ms P50 during generation (19 ms idle), because llama.cpp
+releases the GIL. Memory: ~1.1 GB more in the API process.
+
 The model itself: 141 ms to embed one question, and 1–10 chunks per second to embed documents on
 this CPU. A 300-page PDF (1,246 chunks) took about **7.5 minutes** from upload to searchable,
 against 8.5–10.3 s in v7. That broke v7's 5-minute "worker died" timeout, which the tests (small
@@ -739,7 +810,7 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
    `BrokenRepository` double broke in **both** v3 and v4 for the same structural reason: N
    implementations means N manual edits with no compiler help. mypy or Pyright would have caught
    all of them.
-7. *The test suite takes 373–1,378 seconds* (209 tests in v9; 103 s in v4; 402 s in v7), and one timing-based rate-limit
+7. *The test suite takes 373–1,378 seconds* (218 tests and 443 s in v10; 209 in v9; 103 s in v4; 402 s in v7), and one timing-based rate-limit
    test fails when the machine is heavily loaded (4 bcrypt calls outlast the 15 s refill), which is
    approaching the point where it stops being run
    often enough to be useful. Both standard fixes cost something real: a lower bcrypt cost factor
@@ -766,11 +837,11 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
     anyone. Queue depth and the age of the oldest queued document are the first metrics needed.
     One worker processes documents in series; a document abandoned by a crashed worker waits
     5 minutes (without a heartbeat) before it is retried.
-16. *Semantic search never answers "nothing found".* It always returns its closest chunks, so a
-    relevance threshold is needed before generated answers (v10). Its speed is fixed since v9
-    (147 ms at 50,000 chunks), but the index is approximate: recall must be re-measured on real
-    data. Embedding runs at 1–10 chunks/s on this CPU, so large documents take minutes to become
-    searchable.
+16. *Answers are limited by retrieval, and slow.* For 20% of answerable questions the right
+    article is not among the sources (trigger for hybrid retrieval, v11). Each answer takes ~7 s on
+    a CPU, one at a time per process (trigger for separate model serving, once concurrent use is
+    measured). Wrong answers are not detected at runtime. The vector index is approximate, and its
+    recall must be re-measured on real data. Embedding runs at 1–10 chunks/s.
 17. *Search cost grows with the number of matching chunks*, not with `limit` — v3's problem, inside
     the database. Bounded (108 ms at 39,588 chunks, worst case), not flat.
 18. *Original files are not kept* — no re-extraction, no download

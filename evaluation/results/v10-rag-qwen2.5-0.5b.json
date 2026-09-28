@@ -1,0 +1,888 @@
+{
+  "summary": {
+    "answerable": {
+      "questions": 30,
+      "answered": 0.9,
+      "correct": 0.7,
+      "cited": 0.8
+    },
+    "unanswerable": {
+      "questions": 20,
+      "refused": 0.8,
+      "refused_by_threshold": 0.8,
+      "refused_by_model": 0.0,
+      "hallucinated": 0.2
+    },
+    "latency_seconds": {
+      "model_called_p50": 6.3,
+      "model_called_max": 11.87,
+      "not_called_p50": 0.16
+    }
+  },
+  "questions": [
+    {
+      "question": "How long does a refund take?",
+      "answerable": true,
+      "expected_document": "refund-policy.md",
+      "expected_facts": [
+        "five to ten business days",
+        "5 to 10",
+        "5-10",
+        "ten business days"
+      ],
+      "split": "tune",
+      "answer": "A refund typically takes five to ten business days to appear on your bank statement.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "refund-policy.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 0.78
+    },
+    {
+      "question": "How do I reset my password?",
+      "answerable": true,
+      "expected_document": "reset-password.md",
+      "expected_facts": [
+        "forgot password"
+      ],
+      "split": "test",
+      "answer": "To reset your password, follow these steps:\n\n1. Log in to the sign-in page.\n2. Choose \"Forgot password\" from the dropdown menu.\n3. Enter the email address you registered with.\n4. Click \"Reset password.\"\n5. Follow the prompts to enter your new password and confirm it.\n6. The reset link will expire after one hour.\n7. Check your spam folder if the link doesn't work.\n8. Ask your IT team to allow mail from our domain if the issue persists.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "reset-password.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 8.18
+    },
+    {
+      "question": "How do I enable two-factor authentication?",
+      "answerable": true,
+      "expected_document": "two-factor-authentication.md",
+      "expected_facts": [
+        "Profile > Security",
+        "QR code",
+        "authenticator app"
+      ],
+      "split": "tune",
+      "answer": "To enable two-factor authentication, follow these steps:\n\n1. Open Profile > Security > Two-factor authentication.\n2. Scan the QR code with your authenticator app.\n3. Confirm with the first code.\n4. Save the ten backup codes somewhere safe.\n5. Each works once.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "two-factor-authentication.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 6.13
+    },
+    {
+      "question": "Where can I download my invoices?",
+      "answerable": true,
+      "expected_document": "invoices-and-receipts.md",
+      "expected_facts": [
+        "Invoice history"
+      ],
+      "split": "test",
+      "answer": "You can download your invoices by going to Settings > Billing > Invoice history.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "invoices-and-receipts.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 1.92
+    },
+    {
+      "question": "How do I invite teammates?",
+      "answerable": true,
+      "expected_document": "team-members-invite.md",
+      "expected_facts": [
+        "Settings > Members"
+      ],
+      "split": "tune",
+      "answer": "To invite teammates, follow these steps:\n\n1. Go to Settings > Members > Invite.\n2. Enter one or more email addresses.\n3. Choose a role for the new members.\n4. Enter the email address for the new member.\n5. Click \"Invite\" to proceed.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "team-members-invite.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 6.36
+    },
+    {
+      "question": "Which browsers are supported?",
+      "answerable": true,
+      "expected_document": "supported-browsers.md",
+      "expected_facts": [
+        "Chrome",
+        "Firefox"
+      ],
+      "split": "test",
+      "answer": "The web app supports the latest two versions of Chrome, Firefox, Safari, and Edge.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "supported-browsers.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 7.74
+    },
+    {
+      "question": "What is the maximum attachment size?",
+      "answerable": true,
+      "expected_document": "file-upload-limits.md",
+      "expected_facts": [
+        "25 MB",
+        "25MB"
+      ],
+      "split": "tune",
+      "answer": "The maximum attachment size is 25 MB.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "file-upload-limits.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 4.82
+    },
+    {
+      "question": "How do I create an API key?",
+      "answerable": true,
+      "expected_document": "api-keys.md",
+      "expected_facts": [
+        "Developers"
+      ],
+      "split": "test",
+      "answer": "To create an API key, follow these steps:\n\n1. Go to Settings > Developers > API keys.\n2. Click on the Create button.\n3. Enter a descriptive name for your API key.\n4. Save the key by clicking the Save button.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "api-keys.md",
+        "api-rate-limits.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 7.05
+    },
+    {
+      "question": "How do I export my data as CSV?",
+      "answerable": true,
+      "expected_document": "data-export.md",
+      "expected_facts": [
+        "Settings > Data"
+      ],
+      "split": "tune",
+      "answer": "To export your data as CSV, follow these steps:\n\n1. Go to Settings > Data > Export.\n2. Choose CSV for spreadsheets or JSON for importing into another system.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "data-export.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 5.19
+    },
+    {
+      "question": "How do I cancel my subscription?",
+      "answerable": true,
+      "expected_document": "cancel-subscription.md",
+      "expected_facts": [
+        "Cancel subscription",
+        "Settings > Billing"
+      ],
+      "split": "test",
+      "answer": "To cancel your subscription, follow these steps:\n\n1. Go to Settings > Billing > Cancel subscription.\n2. Click on the \"Cancel subscription\" button.\n3. Confirm the cancellation by clicking \"Yes, cancel subscription.\"",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "cancel-subscription.md",
+        "reset-password.md",
+        "delete-account.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 7.98
+    },
+    {
+      "question": "When is the support team available?",
+      "answerable": true,
+      "expected_document": "contact-support.md",
+      "expected_facts": [
+        "Monday to Friday",
+        "08:00"
+      ],
+      "split": "tune",
+      "answer": "The support team is available from 08:00 to 20:00 CET, Monday to Friday.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "contact-support.md",
+        "service-status.md",
+        "team-members-invite.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 6.25
+    },
+    {
+      "question": "How do I upgrade my plan?",
+      "answerable": true,
+      "expected_document": "plan-upgrade-downgrade.md",
+      "expected_facts": [
+        "Change plan"
+      ],
+      "split": "test",
+      "answer": "To upgrade your plan, you can move between the Starter, Team, and Enterprise plans at any time from Settings > Billing > Change plan. Upgrades take effect immediately, and you are charged a prorated amount for the rest of the current billing period.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "plan-upgrade-downgrade.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 5.51
+    },
+    {
+      "question": "Is my data encrypted at rest?",
+      "answerable": true,
+      "expected_document": "data-security.md",
+      "expected_facts": [
+        "AES-256",
+        "AES"
+      ],
+      "split": "tune",
+      "answer": "Yes, your data is encrypted at rest with AES-256.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "data-security.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 4.04
+    },
+    {
+      "question": "Where is the status page for outages?",
+      "answerable": true,
+      "expected_document": "service-status.md",
+      "expected_facts": [
+        "status.example.com"
+      ],
+      "split": "test",
+      "answer": "The status page for outages is published on our status page at status.example.com.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "service-status.md",
+        "contact-support.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 6.16
+    },
+    {
+      "question": "Why does the API return 429 Too Many Requests?",
+      "answerable": true,
+      "expected_document": "api-rate-limits.md",
+      "expected_facts": [
+        "600"
+      ],
+      "split": "tune",
+      "answer": "The API returns 429 Too Many Requests because it allows 600 requests per minute per API key, and requests over the limit receive a status code of 429, with a Retry-After header indicating the number of seconds to wait before retrying.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "api-rate-limits.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 6.42
+    },
+    {
+      "question": "Can I get my money back?",
+      "answerable": true,
+      "expected_document": "refund-policy.md",
+      "expected_facts": [
+        "30 days",
+        "Refund request",
+        "five to ten",
+        "annual"
+      ],
+      "split": "test",
+      "answer": "Yes, you can get your money back. The refund policy states that annual plans can be refunded in full within 30 days of purchase, and after that, annual plans are refunded pro rata for the unused months, minus any discount that was applied at checkout.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "refund-policy.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 6.55
+    },
+    {
+      "question": "I forgot my login details",
+      "answerable": true,
+      "expected_document": "reset-password.md",
+      "expected_facts": [
+        "forgot password"
+      ],
+      "split": "tune",
+      "answer": "To reset your password, follow these steps:\n\n1. Log in to the sign-in page.\n2. Choose \"Forgot password\" and enter your registered email address.\n3. We will send a reset link that expires after one hour.\n4. If the link does not arrive within ten minutes, check your spam folder and make sure the address is spelled correctly.\n5. If the address is not correct, ask your IT team to allow mail from our domain.\n6. Ensure your password meets the minimum length requirement of 12 characters.\n7. For security, reset your password signs you out of every other device.\n8. Personal data requests (GDPR) are available for access, correction, and erasure.\n9. Request access and erasure within 30 days.\n10. Erasure removes your personal data from the product immediately and from backups within 90 days.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "reset-password.md",
+        "privacy-requests.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 11.87
+    },
+    {
+      "question": "The six digit number from my phone app is not accepted",
+      "answerable": true,
+      "expected_document": "two-factor-authentication.md",
+      "expected_facts": [
+        "backup code"
+      ],
+      "split": "test",
+      "answer": "The six-digit number from your mobile app is not accepted.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "mobile-app-sync.md",
+        "reset-password.md",
+        "contact-support.md"
+      ],
+      "correct": false,
+      "cited": false,
+      "seconds": 7.07
+    },
+    {
+      "question": "How do I stop being charged every month?",
+      "answerable": true,
+      "expected_document": "cancel-subscription.md",
+      "expected_facts": [
+        "Cancel subscription",
+        "Settings > Billing"
+      ],
+      "split": "tune",
+      "answer": "To stop being charged every month, you can remove members instead of cancelling your subscription.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "cancel-subscription.md"
+      ],
+      "correct": false,
+      "cited": true,
+      "seconds": 4.71
+    },
+    {
+      "question": "My card expired, how do I put in a new one?",
+      "answerable": true,
+      "expected_document": "change-billing-details.md",
+      "expected_facts": [
+        "Payment method",
+        "Replace"
+      ],
+      "split": "test",
+      "answer": "To put in a new card, follow these steps:\n\n1. Log in to your account.\n2. Go to the \"Billing\" section.\n3. Click on \"Payment method.\"\n4. Select \"Replace.\"\n5. Enter the new card number and select the payment method you want to use.\n6. Confirm the changes and save the new payment method.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "reset-password.md",
+        "change-billing-details.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 8.56
+    },
+    {
+      "question": "Can a colleague get access to our account?",
+      "answerable": true,
+      "expected_document": "team-members-invite.md",
+      "expected_facts": [
+        "Settings > Members",
+        "invit"
+      ],
+      "split": "tune",
+      "answer": "No, a colleague cannot get access to your account. The context clearly states that \"You have the right to access, correct and erase the personal data we hold about you. Send your request to privacy@example.com from the email address on your account.\" This indicates that you have the authority to access and correct your personal data, but not to access or erase it.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "roles-and-permissions.md",
+        "privacy-requests.md"
+      ],
+      "correct": false,
+      "cited": false,
+      "seconds": 7.94
+    },
+    {
+      "question": "How can I make someone an admin?",
+      "answerable": true,
+      "expected_document": "roles-and-permissions.md",
+      "expected_facts": [
+        "Settings > Members"
+      ],
+      "split": "test",
+      "answer": "To make someone an admin, you need to open Settings > Members, choose the member, and select \"Manage integrations\" and then select \"Manage security settings.\"",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "roles-and-permissions.md",
+        "team-members-invite.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 4.21
+    },
+    {
+      "question": "I want you to forget everything you know about me",
+      "answerable": true,
+      "expected_document": "privacy-requests.md",
+      "expected_facts": [
+        "privacy@example.com"
+      ],
+      "split": "tune",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.15
+    },
+    {
+      "question": "Can I close our company account for good?",
+      "answerable": true,
+      "expected_document": "delete-account.md",
+      "expected_facts": [
+        "Delete workspace",
+        "Settings > Advanced"
+      ],
+      "split": "test",
+      "answer": "Yes, you can close your company account for good.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "reset-password.md",
+        "cancel-subscription.md",
+        "privacy-requests.md"
+      ],
+      "correct": false,
+      "cited": false,
+      "seconds": 7.15
+    },
+    {
+      "question": "Your website is not loading, is it down for everyone?",
+      "answerable": true,
+      "expected_document": "service-status.md",
+      "expected_facts": [
+        "status.example.com"
+      ],
+      "split": "tune",
+      "answer": "No, it's not down for everyone. The web app supports the latest two versions of Chrome, Firefox, Safari, and Edge, and Internet Explorer is not supported. If pages look broken or buttons do nothing, clear the browser cache, disable extensions that block scripts, and reload. Private or incognito windows are a quick way to test without extensions.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "supported-browsers.md"
+      ],
+      "correct": false,
+      "cited": false,
+      "seconds": 6.63
+    },
+    {
+      "question": "Is there a cap on how often my integration can call you?",
+      "answerable": true,
+      "expected_document": "api-rate-limits.md",
+      "expected_facts": [
+        "600"
+      ],
+      "split": "test",
+      "answer": "Yes, there is a cap on how often your integration can call you. The API allows 600 requests per minute per API key. Requests over the limit receive HTTP status 429 Too Many Requests, with a Retry-After header saying how many seconds to wait.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "api-rate-limits.md",
+        "contact-support.md",
+        "service-status.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 8.32
+    },
+    {
+      "question": "How can I get all our tickets into a spreadsheet?",
+      "answerable": true,
+      "expected_document": "data-export.md",
+      "expected_facts": [
+        "CSV"
+      ],
+      "split": "tune",
+      "answer": "To export all your tickets, comments, and attachments from Settings > Data > Export, choose CSV for spreadsheets or JSON for importing into another system.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "data-export.md"
+      ],
+      "correct": true,
+      "cited": true,
+      "seconds": 4.95
+    },
+    {
+      "question": "Edits on my phone don't show up on my laptop",
+      "answerable": true,
+      "expected_document": "mobile-app-sync.md",
+      "expected_facts": [
+        "pull down",
+        "force a sync",
+        "latest version"
+      ],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "model_declined",
+      "sources": [
+        "mobile-app-sync.md"
+      ],
+      "correct": false,
+      "cited": true,
+      "seconds": 1.83
+    },
+    {
+      "question": "Who at your company can look at our information?",
+      "answerable": true,
+      "expected_document": "data-security.md",
+      "expected_facts": [
+        "operations team"
+      ],
+      "split": "tune",
+      "answer": "Every payment produces an invoice.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "privacy-requests.md",
+        "invoices-and-receipts.md",
+        "data-security.md"
+      ],
+      "correct": false,
+      "cited": true,
+      "seconds": 6.35
+    },
+    {
+      "question": "When can I talk to a human?",
+      "answerable": true,
+      "expected_document": "contact-support.md",
+      "expected_facts": [
+        "Monday to Friday",
+        "08:00",
+        "chat"
+      ],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.2
+    },
+    {
+      "question": "Do you offer a discount for students or non-profits?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.17
+    },
+    {
+      "question": "Can I pay with PayPal?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.12
+    },
+    {
+      "question": "Is there a desktop app for Linux?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.12
+    },
+    {
+      "question": "How do I change the language of the app to German?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.13
+    },
+    {
+      "question": "Can I merge two tickets into one?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "Yes, you can merge two tickets into one. To do this, you can select the two tickets you want to merge and then click on the \"Merge\" button in the settings. This will create a new ticket that combines the two original tickets.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "data-export.md"
+      ],
+      "correct": false,
+      "cited": false,
+      "seconds": 6.41
+    },
+    {
+      "question": "Do you integrate with Salesforce?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.09
+    },
+    {
+      "question": "What is the price of the Team plan?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "The price of the Team plan is $50 per month.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "team-members-invite.md"
+      ],
+      "correct": false,
+      "cited": false,
+      "seconds": 3.33
+    },
+    {
+      "question": "How do I set up automatic replies to customers?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.11
+    },
+    {
+      "question": "Can I use my own domain for the help center?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.17
+    },
+    {
+      "question": "Is there a dark mode?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.2
+    },
+    {
+      "question": "How do I change my profile picture?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.18
+    },
+    {
+      "question": "Can I schedule a report to be emailed every week?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "Yes, you can schedule a report to be emailed every week. The context states that \"You can subscribe there to email or SMS notifications.\"",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "service-status.md"
+      ],
+      "correct": false,
+      "cited": false,
+      "seconds": 5.11
+    },
+    {
+      "question": "Where is your office located?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.12
+    },
+    {
+      "question": "Do you have an affiliate or referral program?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.13
+    },
+    {
+      "question": "How many API keys can I create?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "You can create up to 600 API keys.",
+      "answered": true,
+      "reason": "answered",
+      "sources": [
+        "api-keys.md",
+        "api-rate-limits.md"
+      ],
+      "correct": false,
+      "cited": false,
+      "seconds": 5.04
+    },
+    {
+      "question": "Is there an on-premise version I can host myself?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.12
+    },
+    {
+      "question": "What is the capital of France?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.21
+    },
+    {
+      "question": "Who won the football World Cup in 2022?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.26
+    },
+    {
+      "question": "Write me a poem about the sea",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "tune",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.21
+    },
+    {
+      "question": "How do I bake sourdough bread?",
+      "answerable": false,
+      "expected_document": null,
+      "expected_facts": [],
+      "split": "test",
+      "answer": "I could not find an answer to that in the knowledge base.",
+      "answered": false,
+      "reason": "no_relevant_sources",
+      "sources": [],
+      "correct": false,
+      "cited": false,
+      "seconds": 0.2
+    }
+  ]
+}

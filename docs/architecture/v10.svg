@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="980" viewBox="0 0 1040 980" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c62828"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="980" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v10 — RAG: answers written from the knowledge base</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: search returns passages, never answers — and never says "nothing relevant" (it returned chunks for "What is the capital of France?").</text>
+  <text x="30" y="74" fill="#1565c0">FIX: POST /answers — retrieve, drop chunks below a MEASURED threshold, then a local model answers from the rest only, with sources.</text>
+
+  <!-- Main flow -->
+  <rect x="20" y="92" width="600" height="596" rx="8" fill="none" stroke="#1565c0" stroke-dasharray="5,4"/>
+  <text x="34" y="112" font-size="12" font-weight="bold" fill="#1565c0" letter-spacing="1">API PROCESS — POST /answers (new, app/answers/)</text>
+
+  <rect x="40" y="124" width="560" height="44" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="143" font-weight="bold" fill="#222" font-size="12">router.py — {"question": "How do I cancel my subscription?"}</text>
+  <text x="52" y="160" fill="#666" font-size="10">token required · limit_answers: 10 per minute per user (own budget) · 1–500 characters</text>
+  <line x1="320" y1="168" x2="320" y2="188" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="190" width="560" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="209" font-weight="bold" fill="#222" font-size="12">service.py step 1 — RETRIEVE (v8/v9, unchanged)</text>
+  <text x="52" y="226" fill="#666" font-size="10">DocumentService.search(mode="semantic", limit=3) → 3 chunks + cosine scores, tenant-filtered</text>
+  <line x1="320" y1="234" x2="320" y2="254" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="256" width="560" height="60" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="275" font-weight="bold" fill="#222" font-size="12">service.py step 2 — CHECK (guard 1): keep chunks with score ≥ 0.30</text>
+  <text x="52" y="292" fill="#333" font-size="11">0.30 chosen on half of 50 questions, checked on the other half</text>
+  <text x="52" y="308" fill="#666" font-size="10">scripts/choose_relevance_threshold.py · ANSWER_RELEVANCE_THRESHOLD</text>
+
+  <!-- refuse branch -->
+  <line x1="600" y1="286" x2="650" y2="286" stroke="#c62828" stroke-width="1.4" marker-end="url(#arrow-red)"/>
+  <text x="604" y="280" fill="#c62828" font-size="10">none left</text>
+
+  <line x1="320" y1="316" x2="320" y2="336" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="330" y="331" fill="#1565c0" font-size="10">1–3 relevant chunks</text>
+
+  <rect x="40" y="338" width="560" height="100" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="357" font-weight="bold" fill="#222" font-size="12">service.py step 3 — PROMPT (build_messages)</text>
+  <text x="52" y="376" fill="#333" font-size="11">system: "Use ONLY the information in the context. One or two sentences.</text>
+  <text x="52" y="392" fill="#333" font-size="11">         If the context does not contain the answer, reply exactly: I don't know."</text>
+  <text x="52" y="408" fill="#333" font-size="11">user:   "Context: &lt;title + chunk text&gt; … Question: &lt;question&gt;"</text>
+  <text x="52" y="428" fill="#666" font-size="10">no "[1]" citations asked of the model — the API returns the sources itself (measured, see right)</text>
+  <line x1="320" y1="438" x2="320" y2="458" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="460" width="560" height="84" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="479" font-weight="bold" fill="#222" font-size="12">generator.py — Qwen2.5-1.5B-Instruct, 4-bit GGUF (1.1 GB), llama.cpp, CPU (new)</text>
+  <text x="52" y="498" fill="#333" font-size="11">loaded once per process · temperature 0 (same question → same answer)</text>
+  <text x="52" y="515" fill="#333" font-size="11">a lock: one answer at a time per process (a model object is not thread-safe)</text>
+  <text x="52" y="533" fill="#666" font-size="10">C++ code releases Python's GIL → other endpoints keep answering (/health 21 ms)</text>
+  <line x1="320" y1="544" x2="320" y2="564" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="566" width="560" height="44" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="585" font-weight="bold" fill="#222" font-size="12">guard 2 — reply says "I don't know" (or 3 phrasings seen) → not found</text>
+  <text x="52" y="602" fill="#666" font-size="10">related chunks that do not contain the answer; sources still returned for a human to check</text>
+  <line x1="320" y1="610" x2="320" y2="630" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="632" width="560" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="651" font-weight="bold" fill="#222" font-size="11">200 {"answer": "Workspace owners can cancel from Settings &gt; Billing …", "answered": true,</text>
+  <text x="52" y="667" fill="#333" font-size="11">     "sources": [{"number": 1, "document_title": "Cancelling your subscription", "score": 0.65}]}</text>
+
+  <!-- Right: not found -->
+  <rect x="652" y="256" width="368" height="80" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="664" y="275" font-weight="bold" fill="#222" font-size="12">200 {"answered": false,</text>
+  <text x="664" y="292" fill="#333" font-size="11">"reason": "no_relevant_sources", "sources": []}</text>
+  <text x="664" y="310" fill="#666" font-size="10">"What is the capital of France?" — model NOT called,</text>
+  <text x="664" y="325" fill="#666" font-size="10">~0.12 s instead of ~7 s</text>
+
+  <!-- Right: measured changes -->
+  <rect x="640" y="356" width="380" height="332" rx="8" fill="none" stroke="#999" stroke-dasharray="5,4"/>
+  <text x="654" y="376" font-size="12" font-weight="bold" fill="#555" letter-spacing="1">DECIDED BY MEASUREMENT</text>
+
+  <rect x="656" y="388" width="348" height="84" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="668" y="407" font-weight="bold" fill="#c62828" font-size="12">Prompt v1 asked for "[1]" citations</text>
+  <text x="668" y="425" fill="#333" font-size="11">0.5B model replied "[1] Refund policy" and</text>
+  <text x="668" y="441" fill="#333" font-size="11">nothing else → correct 0.17</text>
+  <text x="668" y="460" fill="#1565c0" font-size="11">Final prompt, sources from the API → 0.70</text>
+
+  <rect x="656" y="484" width="348" height="100" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="668" y="503" font-weight="bold" fill="#c62828" font-size="12">0.5B model invented answers</text>
+  <text x="668" y="521" fill="#333" font-size="11">"The price of the Team plan is $50 per month."</text>
+  <text x="668" y="537" fill="#333" font-size="11">"…click on the Merge button" — 4 of 20</text>
+  <text x="668" y="553" fill="#333" font-size="11">unanswerable questions</text>
+  <text x="668" y="572" fill="#1565c0" font-size="11">1.5B: same correctness, 1 of 20 → chosen</text>
+
+  <rect x="656" y="596" width="348" height="80" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="668" y="615" font-weight="bold" fill="#c62828" font-size="12">Scores overlap: 0.19–0.40</text>
+  <text x="668" y="633" fill="#333" font-size="11">"How many API keys can I create?" scores 0.64</text>
+  <text x="668" y="649" fill="#333" font-size="11">but is NOT answerable</text>
+  <text x="668" y="667" fill="#1565c0" font-size="11">→ threshold alone is not enough: guard 2</text>
+
+  <!-- Measurements -->
+  <text x="20" y="716" font-size="12" font-weight="bold" fill="#555" letter-spacing="1">MEASUREMENTS (local CPU laptop, low free memory, 50 questions: 30 answerable + 20 unanswerable, through the API)</text>
+
+  <rect x="20" y="728" width="320" height="104" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="32" y="747" font-weight="bold" fill="#222" font-size="12">Quality (1.5B, final prompt)</text>
+  <text x="32" y="767" fill="#333" font-size="11">answerable: correct 0.70, answered 0.83</text>
+  <text x="32" y="785" fill="#333" font-size="11">unanswerable: refused 0.95 (0.80 threshold</text>
+  <text x="32" y="801" fill="#333" font-size="11">+ 0.15 model), hallucinated 1 of 20</text>
+  <text x="32" y="821" fill="#666" font-size="10">"correct" = expected fact in the answer (string check)</text>
+
+  <rect x="352" y="728" width="330" height="104" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="364" y="747" font-weight="bold" fill="#222" font-size="12">Latency (1.5B)</text>
+  <text x="364" y="767" fill="#333" font-size="11">model called: 7.4 s P50, 13.7 s max</text>
+  <text x="364" y="785" fill="#333" font-size="11">refused by threshold: 0.12 s P50</text>
+  <text x="364" y="803" fill="#333" font-size="11">two questions at once: 6.5 s and 12.4 s</text>
+  <text x="364" y="821" fill="#666" font-size="10">/health during generation: 21 ms P50 (idle 19 ms)</text>
+
+  <rect x="694" y="728" width="326" height="104" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="706" y="747" font-weight="bold" fill="#222" font-size="12">Threshold 0.30, held-out half</text>
+  <text x="706" y="767" fill="#333" font-size="11">answerable kept: 0.93</text>
+  <text x="706" y="785" fill="#333" font-size="11">unanswerable refused: 0.90</text>
+  <text x="706" y="803" fill="#333" font-size="11">(before any model runs)</text>
+  <text x="706" y="821" fill="#666" font-size="10">tuned on the other 25 questions</text>
+
+  <!-- Next limitation -->
+  <rect x="20" y="852" width="1000" height="112" rx="6" fill="#fff8e1" stroke="#f9a825" stroke-width="1.5"/>
+  <text x="32" y="874" font-weight="bold" fill="#8d6e00" font-size="13">NEXT LIMITATION</text>
+  <text x="32" y="896" fill="#333" font-size="12">• Retrieval limits answers: for 20% of answerable questions the right article was not among the sources, and two paraphrases scored below 0.30.</text>
+  <text x="44" y="914" fill="#333" font-size="12">Keyword search is 1.00 on lexical questions → proposed next: v11-hybrid-retrieval (keyword + semantic), measured with the same 50 questions.</text>
+  <text x="32" y="936" fill="#333" font-size="12">• One answer at a time, ~7 s each, in the API process → separate model serving (v14/v15) once concurrent use is measured.</text>
+  <text x="32" y="956" fill="#333" font-size="12">• Wrong answers ("No." to "Can I close our account for good?") are not detected at runtime → reranking (v12), evaluation in production (v18/v20).</text>
+</svg>

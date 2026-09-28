@@ -32,3 +32,7 @@ pypdf>=5.0                # Extracts text from PDF files; pure Python, no system
 # --- Embeddings ------------------------------------------------------------
 fastembed>=0.5            # Runs a local embedding model (text -> vector of meaning) with ONNX Runtime; no PyTorch
 pgvector>=0.4             # Lets SQLAlchemy read and write PostgreSQL vector columns (the pgvector extension)
+
+# --- Generated answers --------------------------------------------------
+# Install with: pip install -r requirements.txt (it adds the index of prebuilt CPU wheels).
+llama-cpp-python>=0.3    # Runs a small local language model (GGUF file) on the CPU with llama.cpp
