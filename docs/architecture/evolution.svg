@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1228" viewBox="0 0 1180 1228" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1326" viewBox="0 0 1180 1326" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
   <defs>
     <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
       <path d="M0,0 L8,4 L0,8 z" fill="#444"/>
     </marker>
   </defs>
 
-  <rect width="1180" height="1228" fill="#ffffff"/>
+  <rect width="1180" height="1326" fill="#ffffff"/>
 
-  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v6</text>
+  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v7</text>
   <text x="30" y="58" fill="#555">Each version exists because the previous one produced a measured limitation. Red = the problem. Blue = the change. Grey = what was measured.</text>
 
   <!-- ============ SECTION A: how the request path changed ============ -->
@@ -235,10 +235,31 @@
   <text x="896" y="1068" font-size="11" fill="#222">anon 200 MB: 401 in 4.1 s → 413 in 2 ms</text>
   <text x="896" y="1090" font-size="10" fill="#777">180 tests, 187 s.</text>
 
+  <!-- row v7 -->
+  <rect x="30" y="1114" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="1157" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v7</text>
+  <text x="85" y="1173" text-anchor="middle" font-size="10" fill="#666">async</text>
+  <rect x="146" y="1114" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="1134" font-size="11" fill="#333">Extraction ran inside the upload: 300-page PDF 7.8–8.1 s.</text>
+  <text x="158" y="1150" font-size="11" fill="#333">CPU work + the GIL slowed everyone: /health P50 15 ms</text>
+  <text x="158" y="1166" font-size="11" fill="#333">→ 335–729 ms while 4 PDFs were processed.</text>
+  <text x="158" y="1188" font-size="11" fill="#c62828">Problem: slow work on the request path, in the API process.</text>
+  <rect x="526" y="1114" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="1134" font-size="11" fill="#333">Upload stores file + "queued" row in one transaction → 202.</text>
+  <text x="538" y="1150" font-size="11" fill="#333">Worker process: FOR UPDATE SKIP LOCKED, retries, rescue of</text>
+  <text x="538" y="1166" font-size="11" fill="#333">abandoned jobs. PostgreSQL is the queue — no Redis.</text>
+  <text x="538" y="1188" font-size="10" fill="#777">Unplanned: list read 5 MB per row (153 → 3.4 ms, deferred);</text>
+  <text x="538" y="1200" font-size="10" fill="#777">worker could not save (missing model imports).</text>
+  <rect x="884" y="1114" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="1134" font-size="11" fill="#222">PDF upload answer: 8 s → 154–217 ms</text>
+  <text x="896" y="1152" font-size="11" fill="#222">/health under load: 335–729 → 17–21 ms</text>
+  <text x="896" y="1170" font-size="11" fill="#222">ready time unchanged (same work)</text>
+  <text x="896" y="1192" font-size="10" fill="#777">196 tests. Laptop on battery.</text>
+
   <!-- next -->
-  <rect x="30" y="1130" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
-  <text x="44" y="1152" font-size="12" font-weight="bold" fill="#222">Open after v6 — what the next versions must answer</text>
-  <text x="44" y="1172" font-size="11.5" fill="#333">1. Keyword search misses meaning: paraphrase hit@3 0.47, 20% empty → embeddings + vector search, measured on the same 30 questions.</text>
-  <text x="44" y="1188" font-size="11.5" fill="#333">2. Ingestion blocks the request (300-page PDF 5.8 s, 4.9 MB text 8.4 s) → background processing.   3. Rate-limit buckets are per process.</text>
-  <text x="44" y="1204" font-size="11.5" fill="#333">4. Search cost grows with matching chunks.   5. Originals not kept.   6. No token revocation, no type checker.   7. Suite at 187 s.</text>
+  <rect x="30" y="1228" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
+  <text x="44" y="1250" font-size="12" font-weight="bold" fill="#222">Open after v7 — what the next versions must answer</text>
+  <text x="44" y="1270" font-size="11.5" fill="#333">1. Keyword search misses meaning: paraphrase hit@3 0.47, 20% empty → embeddings (v8), computed by the worker, measured on the same 30 questions.</text>
+  <text x="44" y="1286" font-size="11.5" fill="#333">2. Nobody notices a stopped worker or a growing queue.   3. Rate-limit buckets are per process.   4. Search cost grows with matching chunks.</text>
+  <text x="44" y="1302" font-size="11.5" fill="#333">5. Originals not kept after processing.   6. No token revocation, no type checker.   7. Test suite runtime keeps growing.</text>
 </svg>

@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AlreadyExistsError, StorageError, translated_errors
-from app.documents.models import Document, DocumentChunk
+from app.documents.models import PROCESSING, QUEUED, Document, DocumentChunk, DocumentFile
 
 Match = Literal["any", "all"]
 
@@ -30,7 +30,7 @@ class SearchHit:
 class DocumentRepository(Protocol):
     # The same rule as tickets (ADR-013): organization_id is required and first
     # on every read, so forgetting it is a TypeError rather than a leak.
-    def add(self, document: Document, chunks: list[DocumentChunk]) -> Document: ...
+    def add(self, document: Document, data: bytes) -> Document: ...
 
     def get(self, organization_id: int, document_id: int) -> Document | None: ...
 
@@ -39,6 +39,8 @@ class DocumentRepository(Protocol):
     def list(self, organization_id: int, limit: int, offset: int) -> list[Document]: ...
 
     def count(self, organization_id: int) -> int: ...
+
+    def count_pending(self, organization_id: int) -> int: ...
 
     def delete(self, organization_id: int, document_id: int) -> bool: ...
 
@@ -57,21 +59,20 @@ class PostgresDocumentRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def add(self, document: Document, chunks: list[DocumentChunk]) -> Document:
-        """Store a document and all its chunks in ONE transaction.
+    def add(self, document: Document, data: bytes) -> Document:
+        """Store a new document and its uploaded file in ONE transaction.
 
-        Either every row is written or none is. A document whose chunks failed
-        halfway would exist, be listed, and never appear in any search.
+        Either both rows are written or neither is. A queued document without
+        its file could never be processed; a file without its document would
+        never be found.
         """
         try:
             self._session.add(document)
             # flush sends the INSERT without committing, so PostgreSQL assigns
-            # document.id - which every chunk needs - while the transaction is
+            # document.id - which the file row needs - while the transaction is
             # still open and can still be rolled back.
             self._session.flush()
-            for chunk in chunks:
-                chunk.document_id = document.id
-            self._session.add_all(chunks)
+            self._session.add(DocumentFile(document_id=document.id, data=data))
             self._session.commit()
         except IntegrityError as error:
             # Caught before SQLAlchemyError, its parent class. But IntegrityError
@@ -130,11 +131,24 @@ class PostgresDocumentRepository:
             )
             return self._session.scalar(statement) or 0
 
+    def count_pending(self, organization_id: int) -> int:
+        """Documents of this organisation still waiting for, or in, the worker."""
+        with translated_errors(self._session):
+            statement = (
+                select(func.count())
+                .select_from(Document)
+                .where(
+                    Document.organization_id == organization_id,
+                    Document.status.in_([QUEUED, PROCESSING]),
+                )
+            )
+            return self._session.scalar(statement) or 0
+
     def delete(self, organization_id: int, document_id: int) -> bool:
         with translated_errors(self._session):
             # One DELETE with both conditions: another organisation's document is
             # simply not matched, which the router reports as 404 (ADR-015). The
-            # chunks go with it via ON DELETE CASCADE.
+            # chunks and any waiting file go with it via ON DELETE CASCADE.
             result = self._session.execute(
                 delete(Document).where(
                     Document.id == document_id,

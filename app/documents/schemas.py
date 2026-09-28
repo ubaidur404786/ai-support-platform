@@ -20,9 +20,15 @@ class DocumentResponse(BaseModel):
     filename: str
     content_type: str
     size_bytes: int
+    # queued -> processing -> ready | failed. Only "ready" documents are searchable.
+    status: str
+    # Why it failed, when status is "failed".
+    error_message: str | None
+    # Known once processed; null / 0 before that.
     page_count: int | None
     chunk_count: int
     created_at: datetime
+    processed_at: datetime | None
 
 
 class DocumentListResponse(BaseModel):

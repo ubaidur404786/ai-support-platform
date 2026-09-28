@@ -14,7 +14,8 @@ evaluation/retrieval_questions.jsonl, and reports:
 split by question type: "lexical" (shares key words with the article) and
 "paraphrase" (same meaning, different words).
 
-Start the server first, then from the repository root:
+Start the server and the worker (python -m app.worker) first - uploads are
+processed in the background since v7. Then, from the repository root:
     python scripts/evaluate_retrieval.py
     python scripts/evaluate_retrieval.py --output evaluation/results/v6-keyword-search.json
 """
@@ -52,10 +53,19 @@ def upload_knowledge_base(client: httpx.Client) -> dict[int, str]:
             "/documents", files={"file": (path.name, path.read_bytes(), "text/markdown")}
         )
         # 409 = uploaded by an earlier run. Anything else is a real failure.
-        if response.status_code not in (201, 409):
+        if response.status_code not in (202, 409):
             raise SystemExit(f"Upload of {path.name} failed: {response.status_code} {response.text}")
 
-    listing = client.get("/documents", params={"limit": 200}).json()
+    # Wait for the worker: a document is only searchable once it is "ready".
+    deadline = time.monotonic() + 120
+    while True:
+        listing = client.get("/documents", params={"limit": 200}).json()
+        statuses = {item["status"] for item in listing["items"]}
+        if statuses <= {"ready", "failed"}:
+            break
+        if time.monotonic() > deadline:
+            raise SystemExit("Documents still not processed after 120 s - is the worker running?")
+        time.sleep(0.5)
     return {item["id"]: item["filename"] for item in listing["items"]}
 
 

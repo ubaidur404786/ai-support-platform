@@ -18,15 +18,19 @@ SUPPORTED_EXTENSIONS = {".txt": "text", ".md": "markdown", ".pdf": "pdf"}
 
 
 class UnsupportedDocumentType(ValueError):
-    """The file is not a type we can read. Becomes 415."""
+    """The file is not a type we can read. Found during the upload: 415."""
 
 
 class UnreadableDocument(ValueError):
-    """The file claims a supported type but its content cannot be used. Becomes 422."""
+    """The file claims a supported type but its content cannot be used.
+
+    Found by the worker (v7): the document becomes "failed" with this message.
+    """
 
 
 class DocumentTooLarge(ValueError):
-    """The file is within the byte limit but would still cost too much work. Becomes 413."""
+    """Too much work: over the byte limit (413 at upload) or the page limit
+    (found by the worker: the document becomes "failed")."""
 
 
 @dataclass(frozen=True)

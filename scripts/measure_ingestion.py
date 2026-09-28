@@ -2,7 +2,9 @@
 
 Two views of the same work:
   in-process - extract_text() and chunk_text() timed directly, no HTTP, no DB
-  end-to-end - POST /documents through the running API, including the insert
+  end-to-end - POST /documents through the running API. In v6 this included the
+               extraction; since v7 it is only the time to store the file (the
+               worker does the rest - see measure_async_ingestion.py)
 
 Start the server with the ingestion limit raised, so the measurement is not
 refused by its own rate limiter:
@@ -107,7 +109,7 @@ def main() -> None:
                 start = time.perf_counter()
                 response = client.post("/documents", files={"file": (filename, data, "application/octet-stream")})
                 http_ms.append((time.perf_counter() - start) * 1000)
-                if response.status_code != 201:
+                if response.status_code not in (201, 202):
                     raise SystemExit(f"{label}: {response.status_code} {response.text[:200]}")
 
             print(

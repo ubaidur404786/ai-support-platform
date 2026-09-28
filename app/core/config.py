@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.6.0"
+    app_version: str = "0.7.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -56,8 +56,8 @@ class Settings(BaseSettings):
     # Model inference (POST /classify and POST /tickets), per user. One budget for
     # both, because both spend the same resource: the classifier's CPU time.
     inference_rate_limit_per_minute: int = 60
-    # Document uploads, per user. Extraction and chunking run inside the request,
-    # so an upload is the most expensive thing an authenticated user can ask for.
+    # Document uploads, per user. Since v7 the request only stores the file, but
+    # every upload still becomes work for the worker later.
     ingestion_rate_limit_per_minute: int = 20
 
     # Documents. Every limit here bounds the work ONE upload can cause (ADR-011).
@@ -76,6 +76,24 @@ class Settings(BaseSettings):
     # Upper bound on search results per request, for the same reason as
     # max_page_size.
     max_search_results: int = 20
+
+    # Background processing (v7). The worker is a separate process
+    # (python -m app.worker) that turns queued uploads into searchable chunks.
+    #
+    # How long the worker sleeps when there is nothing to do. It is also the
+    # longest a new upload waits before the worker notices it.
+    worker_poll_seconds: float = 1.0
+    # A document still "processing" after this long belonged to a worker that
+    # died (crash, killed, machine restarted). It is put back in the queue. Must
+    # be comfortably longer than the slowest real document (~8 s measured).
+    worker_stale_after_seconds: int = 300
+    # Tries per document before it is marked failed. Only unexpected errors are
+    # retried: an unreadable file will be just as unreadable the next time.
+    worker_max_attempts: int = 3
+    # Documents one organisation may have waiting at once. The rate limit bounds
+    # uploads per minute; this bounds the queue itself, so one organisation
+    # cannot bury everyone else's uploads under its own.
+    max_pending_documents_per_organization: int = 50
 
     # Read a .env file if present; real environment variables take priority over it.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

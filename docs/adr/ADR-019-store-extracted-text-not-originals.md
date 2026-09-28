@@ -1,6 +1,6 @@
 # ADR-019 — Store the extracted text, not the original file
 
-Status: accepted (v6)
+Status: accepted (v6). The v7 trigger below has fired - answered by ADR-022 (files wait in PostgreSQL, not object storage).
 
 ## Context
 

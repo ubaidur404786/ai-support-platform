@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -30,6 +31,16 @@ from app.core.database import Base
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# The life of an upload since v7. The request only stores the file (QUEUED); the
+# worker picks it up (PROCESSING) and either finishes it (READY) or gives up on
+# it (FAILED, with the reason in error_message). Only READY documents have chunks,
+# so only READY documents can be found by search.
+QUEUED = "queued"
+PROCESSING = "processing"
+READY = "ready"
+FAILED = "failed"
 
 
 class Document(Base):
@@ -60,11 +71,34 @@ class Document(Base):
     # to refuse a second upload of the same file (see the unique constraint).
     sha256: Mapped[str] = mapped_column(String(64))
 
-    # The full extracted text. The original file is NOT kept - only what we
-    # extracted from it. Enough to re-chunk later; not enough to re-extract with
-    # a better PDF reader. Recorded as a trade-off in ADR-019.
-    content: Mapped[str] = mapped_column(Text)
-    chunk_count: Mapped[int] = mapped_column(Integer)
+    # The full extracted text, written by the worker; empty (NULL) until then.
+    # The original file is not kept once processed - only what we extracted from
+    # it (ADR-019).
+    #
+    # deferred=True: not loaded with the rest of the row, only if the code actually
+    # reads document.content. Measured in v7: listing 5 documents took ~200 ms
+    # because every list query read up to 5 MB of text per row that the response
+    # never contained.
+    content: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # --- Processing state (v7) ---------------------------------------------------
+    # Indexed because the worker asks "which documents are queued?" every second.
+    status: Mapped[str] = mapped_column(String(20), default=QUEUED, index=True)
+    # Why processing failed, in words the uploader can act on ("Encrypted PDFs
+    # are not supported"). NULL unless status is FAILED.
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # How many times a worker has started on this document. Limits retries.
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    # When a worker last started on it - how a document abandoned by a crashed
+    # worker is recognised: still PROCESSING, started long ago.
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # When it became READY or FAILED.
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -76,6 +110,29 @@ class Document(Base):
             "organization_id", "sha256", name="uq_documents_organization_id_sha256"
         ),
     )
+
+
+class DocumentFile(Base):
+    """The uploaded bytes, waiting for the worker.
+
+    The request and the worker are different processes, so the file needs a
+    place both can reach. PostgreSQL is that place: it is already there, the file
+    is written in the same transaction as its document row (no document without
+    its file, no file without its document), and uploads are capped at 5 MB.
+
+    A separate table, not a column on documents, so that listing documents never
+    reads file bytes. The row is deleted as soon as the worker has finished.
+    """
+
+    __tablename__ = "document_files"
+
+    # The document's id is also this table's primary key: exactly one file per
+    # document. CASCADE: deleting a queued document deletes its file too.
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    # LargeBinary is PostgreSQL's BYTEA: raw bytes, not text.
+    data: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class DocumentChunk(Base):

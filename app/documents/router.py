@@ -10,18 +10,19 @@ from app.auth.models import User
 from app.core.config import settings
 from app.core.errors import AlreadyExistsError, StorageError
 from app.documents.dependencies import get_document_service
-from app.documents.extraction import (
-    DocumentTooLarge,
-    UnreadableDocument,
-    UnsupportedDocumentType,
-)
+from app.documents.extraction import DocumentTooLarge, UnsupportedDocumentType
 from app.documents.schemas import (
     DocumentListResponse,
     DocumentResponse,
     SearchResponse,
     SearchResult,
 )
-from app.documents.service import DocumentService, DuplicateDocument, EmptySearchQuery
+from app.documents.service import (
+    DocumentService,
+    DuplicateDocument,
+    EmptySearchQuery,
+    TooManyPendingDocuments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +33,13 @@ def _storage_unavailable() -> HTTPException:
     return HTTPException(status_code=503, detail="Storage is unavailable")
 
 
-# Plain "def": extraction and chunking are CPU work and the database driver is
-# synchronous, so FastAPI runs this in its thread pool.
-@router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
+# 202 Accepted, not 201 Created: "your file is stored and will be processed",
+# not "your document is ready". The client follows progress with
+# GET /documents/{id} until status is "ready" or "failed".
+#
+# Plain "def": the database driver is synchronous, so FastAPI runs this in its
+# thread pool. Since v7 the work here is small: checks, one hash, two INSERTs.
+@router.post("", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
 def upload_document(
     # File(...) reads one part of a multipart/form-data body - the format
     # browsers and HTTP clients use to send files. Needs python-multipart.
@@ -55,7 +60,7 @@ def upload_document(
         )
 
     try:
-        document = service.ingest(
+        document = service.upload(
             organization_id=current_user.organization_id,
             user_id=current_user.id,
             filename=file.filename or "upload",
@@ -67,9 +72,10 @@ def upload_document(
         raise HTTPException(status_code=415, detail=str(error))
     except DocumentTooLarge as error:
         raise HTTPException(status_code=413, detail=str(error))
-    except UnreadableDocument as error:
-        # 422: a supported type, but this particular file cannot be used.
-        raise HTTPException(status_code=422, detail=str(error))
+    except TooManyPendingDocuments as error:
+        # 429: the same meaning as a rate limit - slow down - but counted in
+        # waiting documents rather than requests per minute.
+        raise HTTPException(status_code=429, detail=str(error))
     except DuplicateDocument as error:
         raise HTTPException(status_code=409, detail=str(error))
     except AlreadyExistsError:
@@ -77,7 +83,7 @@ def upload_document(
         # because a concurrent upload won the race after our own check.
         raise HTTPException(status_code=409, detail="This document has already been uploaded")
     except StorageError:
-        logger.exception("Storage unavailable while ingesting a document")
+        logger.exception("Storage unavailable while storing an upload")
         raise _storage_unavailable()
 
     return DocumentResponse.model_validate(document)

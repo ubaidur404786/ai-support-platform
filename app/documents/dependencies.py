@@ -21,9 +21,7 @@ def get_document_service(
     return DocumentService(
         repository=repository,
         max_document_bytes=settings.max_document_bytes,
-        max_document_pages=settings.max_document_pages,
-        chunk_max_chars=settings.chunk_max_chars,
-        chunk_overlap_chars=settings.chunk_overlap_chars,
+        max_pending_documents=settings.max_pending_documents_per_organization,
         max_page_size=settings.max_page_size,
         max_search_results=settings.max_search_results,
     )

@@ -64,7 +64,7 @@ def clean_database():
         # together lets PostgreSQL drop the constraint check for the duration.
         connection.execute(
             text(
-                "TRUNCATE TABLE document_chunks, documents, tickets, users, organizations "
+                "TRUNCATE TABLE document_files, document_chunks, documents, tickets, users, organizations "
                 "RESTART IDENTITY CASCADE"
             )
         )

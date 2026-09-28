@@ -1,4 +1,9 @@
-"""Business logic for documents: ingest (extract -> chunk -> store) and search."""
+"""Business logic for documents: accept an upload, read, delete and search.
+
+Since v7 the slow part - extracting and chunking - is not here. It runs in the
+worker (app/documents/processing.py). An upload only checks what is cheap to
+check, stores the file, and returns.
+"""
 
 # Annotations are read lazily. Without this, "list[...]" inside the class body
 # would refer to the method named list defined above it, not the built-in type.
@@ -9,9 +14,8 @@ import logging
 import re
 from dataclasses import dataclass
 
-from app.documents.chunking import chunk_text
-from app.documents.extraction import DocumentTooLarge, derive_title, extract_text
-from app.documents.models import Document, DocumentChunk
+from app.documents.extraction import DocumentTooLarge, derive_title, detect_type
+from app.documents.models import QUEUED, Document
 from app.documents.repository import DocumentRepository, Match, SearchHit
 
 logger = logging.getLogger(__name__)
@@ -31,6 +35,10 @@ class EmptySearchQuery(ValueError):
     pass
 
 
+class TooManyPendingDocuments(Exception):
+    """The organisation already has a full queue. Becomes 429."""
+
+
 @dataclass(frozen=True)
 class DocumentPage:
     items: list[Document]
@@ -44,21 +52,17 @@ class DocumentService:
         self,
         repository: DocumentRepository,
         max_document_bytes: int = 5_000_000,
-        max_document_pages: int = 300,
-        chunk_max_chars: int = 800,
-        chunk_overlap_chars: int = 100,
+        max_pending_documents: int = 50,
         max_page_size: int = 200,
         max_search_results: int = 20,
     ) -> None:
         self._repository = repository
         self._max_document_bytes = max_document_bytes
-        self._max_document_pages = max_document_pages
-        self._chunk_max_chars = chunk_max_chars
-        self._chunk_overlap_chars = chunk_overlap_chars
+        self._max_pending_documents = max_pending_documents
         self._max_page_size = max_page_size
         self._max_search_results = max_search_results
 
-    def ingest(
+    def upload(
         self,
         organization_id: int,
         user_id: int,
@@ -66,56 +70,61 @@ class DocumentService:
         data: bytes,
         title: str | None = None,
     ) -> Document:
-        # The router checks size too; the service must not rely on that, for the
-        # same reason it clamps page sizes - a worker or CLI calls it directly.
+        """Check the upload, store it as QUEUED, and return straight away.
+
+        Only checks that take microseconds happen here: size, file type, "have
+        we seen this file?", "is the queue full?". Anything that needs the file
+        to be read - broken PDFs, too many pages, no text - is found by the
+        worker and reported through the document's status.
+        """
+        # The router checks size too; the service must not rely on that, because
+        # it can be called without HTTP (a script, a test).
         if len(data) > self._max_document_bytes:
             raise DocumentTooLarge(
                 f"File is {len(data)} bytes; the limit is {self._max_document_bytes}"
             )
+        # Reads only the extension and the first bytes, so still answered now.
+        content_type = detect_type(filename, data)
 
-        # Hash before the expensive work: a file we already have is refused
-        # without extracting it again.
         sha256 = hashlib.sha256(data).hexdigest()
         existing = self._repository.get_by_hash(organization_id, sha256)
         if existing is not None:
             raise DuplicateDocument(existing.id)
 
-        extracted = extract_text(filename, data, self._max_document_pages)
-        chunks = chunk_text(
-            extracted.text, self._chunk_max_chars, self._chunk_overlap_chars
-        )
+        # Backpressure: stop accepting work faster than it can be done. Without
+        # this the queue - and the wait for everyone behind it - grows forever.
+        if self._repository.count_pending(organization_id) >= self._max_pending_documents:
+            raise TooManyPendingDocuments(
+                f"{self._max_pending_documents} documents are already waiting to be "
+                "processed; try again when some are ready"
+            )
+
+        if not title or not title.strip():
+            # A Markdown heading is on the first line, so reading the first
+            # kilobyte is enough - no need to decode the whole file here.
+            first_text = data[:1000].decode("utf-8-sig", errors="ignore").lstrip()
+            title = derive_title(filename, first_text if content_type != "pdf" else "")
 
         document = Document(
             # From the authenticated caller, never from the request (ADR-013).
             organization_id=organization_id,
             uploaded_by_user_id=user_id,
-            title=(title or "").strip()[:300] or derive_title(filename, extracted.text),
+            title=title.strip()[:300],
             filename=filename[:255],
-            content_type=extracted.content_type,
+            content_type=content_type,
             size_bytes=len(data),
-            page_count=extracted.page_count,
             sha256=sha256,
-            content=extracted.text,
-            chunk_count=len(chunks),
+            status=QUEUED,
+            attempts=0,
+            # The worker fills in content, page_count and chunk_count later.
+            chunk_count=0,
         )
-        rows = [
-            DocumentChunk(
-                organization_id=organization_id,
-                chunk_index=chunk.index,
-                text=chunk.text,
-                start_char=chunk.start,
-                end_char=chunk.end,
-            )
-            for chunk in chunks
-        ]
-        stored = self._repository.add(document, rows)
+        stored = self._repository.add(document, data)
         logger.info(
-            "Document ingested: id=%s type=%s bytes=%s pages=%s chunks=%s",
+            "Document queued: id=%s type=%s bytes=%s",
             stored.id,
             stored.content_type,
             stored.size_bytes,
-            stored.page_count,
-            stored.chunk_count,
         )
         return stored
 

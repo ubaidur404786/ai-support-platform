@@ -3,6 +3,10 @@
 tickets_client is authenticated as a user of Acme; second_org_client as a user
 of Globex, against the same database. The name tickets_client predates
 documents - it means "an authenticated client" (see conftest.py).
+
+Since v7 an upload only queues the document. process_queue() does, inside the
+test, what the worker process does in real life. The worker's own edge cases
+(crashes, retries, two workers) are in test_worker.py.
 """
 
 import pytest
@@ -13,8 +17,8 @@ from app.core.config import Settings
 from app.core.database import SessionLocal
 from app.core.errors import StorageError
 from app.documents.dependencies import get_document_repository
-from app.documents.models import Document, DocumentChunk
-from app.documents.repository import PostgresDocumentRepository
+from app.documents.models import DocumentFile
+from app.documents.processing import process_next_document
 from app.main import create_app
 from tests.conftest import _register_and_login
 from tests.pdf_factory import make_pdf
@@ -38,28 +42,74 @@ def upload(client, filename, content, title=None):
     )
 
 
-# --- Upload --------------------------------------------------------------------
+def process_queue():
+    """Do what the worker process does: process every queued document."""
+    with SessionLocal() as session:
+        while process_next_document(session):
+            pass
 
 
-def test_upload_markdown_extracts_and_chunks(tickets_client):
+def upload_and_process(client, filename, content, title=None):
+    """Upload, let the worker run, and return the document as it is now."""
+    response = upload(client, filename, content, title)
+    assert response.status_code == 202, response.text
+    process_queue()
+    return client.get(f"/documents/{response.json()['id']}").json()
+
+
+def waiting_files() -> int:
+    with SessionLocal() as session:
+        return session.scalar(select(func.count()).select_from(DocumentFile))
+
+
+# --- Upload ---------------------------------------------------------------------
+
+
+def test_upload_is_accepted_and_queued(tickets_client):
     response = upload(tickets_client, "refunds.md", REFUNDS.encode())
 
-    assert response.status_code == 201
+    # 202: stored, not yet processed. Nothing slow happened in this request.
+    assert response.status_code == 202
     body = response.json()
+    assert body["status"] == "queued"
     assert body["title"] == "Refund policy"  # from the first heading
     assert body["filename"] == "refunds.md"
     assert body["content_type"] == "markdown"
     assert body["size_bytes"] == len(REFUNDS.encode())
-    assert body["page_count"] is None
-    assert body["chunk_count"] == 1
+    assert body["chunk_count"] == 0
+    assert body["processed_at"] is None
     # Metadata only: the text itself is never in this response.
     assert "content" not in body
+    assert waiting_files() == 1
+
+
+def test_the_worker_makes_it_ready(tickets_client):
+    body = upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    assert body["status"] == "ready"
+    assert body["error_message"] is None
+    assert body["chunk_count"] == 1
+    assert body["page_count"] is None
+    assert body["processed_at"] is not None
+    # The file is deleted once its text is extracted.
+    assert waiting_files() == 0
+
+
+def test_a_queued_document_is_not_searchable_yet(tickets_client):
+    upload(tickets_client, "refunds.md", REFUNDS.encode())
+
+    before = tickets_client.get("/documents/search", params={"q": "refund"}).json()["results"]
+    process_queue()
+    after = tickets_client.get("/documents/search", params={"q": "refund"}).json()["results"]
+
+    assert before == []
+    assert len(after) == 1
 
 
 def test_upload_pdf_counts_pages(tickets_client):
     pdf = make_pdf(["Shipping times", "Orders ship within two days."])
 
-    body = upload(tickets_client, "Shipping.pdf", pdf).json()
+    body = upload_and_process(tickets_client, "Shipping.pdf", pdf)
 
     assert body["content_type"] == "pdf"
     assert body["page_count"] == 2
@@ -75,7 +125,7 @@ def test_an_explicit_title_wins(tickets_client):
 def test_a_long_document_becomes_many_chunks(tickets_client):
     long_text = ("Refunds are issued within ten business days. " * 400).encode()
 
-    body = upload(tickets_client, "long.txt", long_text).json()
+    body = upload_and_process(tickets_client, "long.txt", long_text)
 
     # ~18,000 characters at <= 800 per chunk.
     assert body["chunk_count"] >= 23
@@ -84,6 +134,7 @@ def test_a_long_document_becomes_many_chunks(tickets_client):
 def test_the_same_file_twice_is_a_conflict(tickets_client):
     first = upload(tickets_client, "refunds.md", REFUNDS.encode())
     # A different name does not make it a different file: the hash is of the bytes.
+    # Refused while the first copy is still queued, too.
     second = upload(tickets_client, "copy-of-refunds.md", REFUNDS.encode())
 
     assert second.status_code == 409
@@ -92,27 +143,75 @@ def test_the_same_file_twice_is_a_conflict(tickets_client):
 
 def test_two_organisations_may_upload_the_same_file(tickets_client, second_org_client):
     """The uniqueness rule is per organisation: each owns its own copy."""
-    assert upload(tickets_client, "refunds.md", REFUNDS.encode()).status_code == 201
-    assert upload(second_org_client, "refunds.md", REFUNDS.encode()).status_code == 201
+    assert upload(tickets_client, "refunds.md", REFUNDS.encode()).status_code == 202
+    assert upload(second_org_client, "refunds.md", REFUNDS.encode()).status_code == 202
 
 
 @pytest.mark.parametrize(
-    "filename, content, status",
+    "filename, content",
     [
-        ("tool.exe", b"MZ binary", 415),
-        ("fake.pdf", b"not a pdf at all", 415),
-        ("broken.pdf", b"%PDF-1.4 garbage", 422),
-        ("scan.pdf", make_pdf([""]), 422),
-        ("latin1.txt", "café".encode("latin-1"), 422),
-        ("blank.md", b"   \n\n ", 422),
+        ("tool.exe", b"MZ binary"),
+        ("fake.pdf", b"not a pdf at all"),
     ],
 )
-def test_unusable_files_are_refused(tickets_client, filename, content, status):
+def test_unsupported_types_are_refused_at_upload(tickets_client, filename, content):
+    """Name and first bytes are enough to know - no reason to queue it."""
     response = upload(tickets_client, filename, content)
 
-    assert response.status_code == status
-    # Nothing was stored for a refused file.
+    assert response.status_code == 415
     assert tickets_client.get("/documents").json()["total"] == 0
+    assert waiting_files() == 0
+
+
+@pytest.mark.parametrize(
+    "filename, content, reason",
+    [
+        ("broken.pdf", b"%PDF-1.4 garbage", "Could not read PDF"),
+        ("scan.pdf", make_pdf([""]), "No extractable text"),
+        ("latin1.txt", "caf\u00e9".encode("latin-1"), "UTF-8"),
+        ("blank.md", b"   \n\n ", "No extractable text"),
+    ],
+)
+def test_unreadable_files_fail_with_a_reason(tickets_client, filename, content, reason):
+    """Only reading the file shows these problems, so the worker finds them.
+    The document stays visible as "failed", with a reason the uploader can act on."""
+    assert upload(tickets_client, filename, content).status_code == 202
+
+    process_queue()
+
+    [document] = tickets_client.get("/documents").json()["items"]
+    assert document["status"] == "failed"
+    assert reason in document["error_message"]
+    assert document["chunk_count"] == 0
+    assert waiting_files() == 0
+
+
+def test_a_pdf_over_the_page_limit_fails(tickets_client, monkeypatch):
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "max_document_pages", 2)
+
+    body = upload_and_process(tickets_client, "long.pdf", make_pdf(["a", "b", "c"]))
+
+    assert body["status"] == "failed"
+    assert "3 pages" in body["error_message"]
+
+
+def test_a_full_queue_is_429(tickets_client, monkeypatch):
+    """Backpressure: an organisation cannot queue work faster than it is done."""
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "max_pending_documents_per_organization", 2)
+
+    statuses = [
+        upload(tickets_client, f"doc{i}.txt", f"Document {i}".encode()).status_code
+        for i in range(3)
+    ]
+    process_queue()
+    after_processing = upload(tickets_client, "doc3.txt", b"Document 3")
+
+    assert statuses == [202, 202, 429]
+    assert after_processing.status_code == 202
 
 
 def test_a_file_over_the_size_limit_is_413(tickets_client, monkeypatch):
@@ -149,6 +248,7 @@ def test_an_oversized_body_is_refused_before_authentication(anonymous_client):
 def test_list_is_newest_first_and_paged(tickets_client):
     for i in range(3):
         upload(tickets_client, f"doc{i}.txt", f"Document number {i}".encode())
+    process_queue()
 
     body = tickets_client.get("/documents", params={"limit": 2}).json()
 
@@ -156,17 +256,20 @@ def test_list_is_newest_first_and_paged(tickets_client):
     assert [d["filename"] for d in body["items"]] == ["doc2.txt", "doc1.txt"]
 
 
-def test_get_returns_the_metadata(tickets_client):
+def test_get_follows_the_status(tickets_client):
     created = upload(tickets_client, "refunds.md", REFUNDS.encode()).json()
 
-    fetched = tickets_client.get(f"/documents/{created['id']}")
+    queued = tickets_client.get(f"/documents/{created['id']}")
+    process_queue()
+    ready = tickets_client.get(f"/documents/{created['id']}")
 
-    assert fetched.status_code == 200
-    assert fetched.json() == created
+    assert queued.status_code == 200
+    assert queued.json() == created
+    assert ready.json()["status"] == "ready"
 
 
 def test_delete_removes_the_document_and_its_chunks(tickets_client):
-    created = upload(tickets_client, "refunds.md", REFUNDS.encode()).json()
+    created = upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
 
     assert tickets_client.delete(f"/documents/{created['id']}").status_code == 204
     assert tickets_client.get(f"/documents/{created['id']}").status_code == 404
@@ -176,9 +279,19 @@ def test_delete_removes_the_document_and_its_chunks(tickets_client):
     assert tickets_client.delete(f"/documents/{created['id']}").status_code == 404
 
 
+def test_deleting_a_queued_document_removes_its_file(tickets_client):
+    created = upload(tickets_client, "refunds.md", REFUNDS.encode()).json()
+
+    assert tickets_client.delete(f"/documents/{created['id']}").status_code == 204
+    assert waiting_files() == 0
+    # Nothing left for the worker to do.
+    with SessionLocal() as session:
+        assert process_next_document(session) is False
+
+
 def test_another_organisations_document_is_invisible(tickets_client, second_org_client):
     """Read, delete and search all behave as if the document did not exist."""
-    created = upload(tickets_client, "refunds.md", REFUNDS.encode()).json()
+    created = upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
     document_id = created["id"]
 
     assert second_org_client.get(f"/documents/{document_id}").status_code == 404
@@ -196,8 +309,8 @@ def test_another_organisations_document_is_invisible(tickets_client, second_org_
 
 
 def test_search_returns_the_matching_passage(tickets_client):
-    refunds = upload(tickets_client, "refunds.md", REFUNDS.encode()).json()
-    upload(tickets_client, "passwords.md", PASSWORDS.encode())
+    refunds = upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+    upload_and_process(tickets_client, "passwords.md", PASSWORDS.encode())
 
     body = tickets_client.get("/documents/search", params={"q": "refund"}).json()
 
@@ -213,7 +326,7 @@ def test_search_returns_the_matching_passage(tickets_client):
 
 def test_search_matches_word_forms(tickets_client):
     """Stemming: "refunded" and "refunds" both reduce to "refund"."""
-    upload(tickets_client, "refunds.md", REFUNDS.encode())
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
 
     results = tickets_client.get("/documents/search", params={"q": "refunded"}).json()["results"]
 
@@ -221,8 +334,8 @@ def test_search_matches_word_forms(tickets_client):
 
 
 def test_any_ranks_better_matches_first_and_all_requires_every_word(tickets_client):
-    refunds = upload(tickets_client, "refunds.md", REFUNDS.encode()).json()
-    passwords = upload(tickets_client, "passwords.md", PASSWORDS.encode()).json()
+    refunds = upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+    passwords = upload_and_process(tickets_client, "passwords.md", PASSWORDS.encode())
     query = {"q": "reset password email"}
 
     any_hits = tickets_client.get("/documents/search", params=query).json()["results"]
@@ -250,7 +363,7 @@ def test_a_query_with_no_words_is_422(tickets_client, query):
 
 
 def test_operator_characters_inside_a_query_are_harmless(tickets_client):
-    upload(tickets_client, "refunds.md", REFUNDS.encode())
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
 
     response = tickets_client.get("/documents/search", params={"q": "refund') | !(x"})
 
@@ -260,7 +373,7 @@ def test_operator_characters_inside_a_query_are_harmless(tickets_client):
 
 def test_search_results_are_bounded(tickets_client):
     for i in range(3):
-        upload(tickets_client, f"r{i}.txt", f"Refund rule number {i}".encode())
+        upload_and_process(tickets_client, f"r{i}.txt", f"Refund rule number {i}".encode())
 
     over = tickets_client.get("/documents/search", params={"q": "refund", "limit": 21})
     capped = tickets_client.get("/documents/search", params={"q": "refund", "limit": 2})
@@ -278,7 +391,7 @@ def test_search_requires_a_token(anonymous_client):
 
 def test_storage_failure_is_503(tickets_client):
     class BrokenRepository:
-        def add(self, document, chunks):
+        def add(self, document, data):
             raise StorageError("connection refused")
 
         def get(self, organization_id, document_id):
@@ -291,6 +404,9 @@ def test_storage_failure_is_503(tickets_client):
             raise StorageError("connection refused")
 
         def count(self, organization_id):
+            raise StorageError("connection refused")
+
+        def count_pending(self, organization_id):
             raise StorageError("connection refused")
 
         def delete(self, organization_id, document_id):
@@ -310,51 +426,6 @@ def test_storage_failure_is_503(tickets_client):
         tickets_client.app.dependency_overrides.clear()
 
 
-def test_a_failed_chunk_insert_leaves_no_document_behind(tickets_client):
-    """Document and chunks are one transaction: all rows or none.
-
-    A chunk with no text violates NOT NULL, so the insert fails after the
-    document row was already sent (flushed). The rollback must take the document
-    with it - and the error must be a StorageError, not a 409: a NOT NULL
-    violation is a bug, not a duplicate.
-    """
-    upload(tickets_client, "passwords.md", PASSWORDS.encode())
-    # Acme and its user are the first rows created after RESTART IDENTITY.
-    organization_id, user_id = 1, 1
-
-    session = SessionLocal()
-    try:
-        repository = PostgresDocumentRepository(session)
-        document = Document(
-            organization_id=organization_id,
-            uploaded_by_user_id=user_id,
-            title="Half written",
-            filename="half.txt",
-            content_type="text",
-            size_bytes=4,
-            sha256="0" * 64,
-            content="text",
-            chunk_count=1,
-        )
-        bad_chunk = DocumentChunk(
-            organization_id=organization_id,
-            chunk_index=0,
-            text=None,
-            start_char=0,
-            end_char=4,
-        )
-        with pytest.raises(StorageError):
-            repository.add(document, [bad_chunk])
-
-        titles = session.scalars(select(Document.title)).all()
-        chunk_rows = session.scalar(select(func.count()).select_from(DocumentChunk))
-    finally:
-        session.close()
-
-    assert "Half written" not in titles
-    assert chunk_rows == 1  # only the chunk of passwords.md
-
-
 def test_uploads_are_rate_limited_per_user(clean_database):
     with TestClient(create_app(Settings(ingestion_rate_limit_per_minute=2))) as client:
         token = _register_and_login(client, "Acme", "user@acme.example")
@@ -367,5 +438,5 @@ def test_uploads_are_rate_limited_per_user(clean_database):
         # Reads and searches spend no ingestion budget.
         search = client.get("/documents/search", params={"q": "document"})
 
-    assert statuses == [201, 201, 429]
+    assert statuses == [202, 202, 429]
     assert search.status_code == 200

@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v6 — Document ingestion and keyword search** (branch `v6-document-ingestion`)
+**Current version: v7 — Background processing for document ingestion** (branch `v7-async-processing`)
 
 ## 1. Project Overview
 
@@ -15,7 +15,8 @@ controlled actions such as creating or updating tickets.
 The engineering goal is a production-style AI system whose every component can be justified:
 what problem forced it in, what it costs, and what happens when it fails. The architecture
 history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
-`v3-pagination`, `v4-authentication`, `v5-rate-limiting`, `v6-document-ingestion`, ...)
+`v3-pagination`, `v4-authentication`, `v5-rate-limiting`, `v6-document-ingestion`,
+`v7-async-processing`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -38,20 +39,23 @@ a human steps in where the model is unsure rather than everywhere.
 | Per-caller limits on model inference and login attempts (429 + `Retry-After`) | Available | v5 |
 | Knowledge-base documents (.txt / .md / .pdf) extracted, chunked and stored per organisation | Available | v6 |
 | Keyword search over document chunks, with a measured retrieval baseline | Available | v6 |
+| Documents processed in a background worker; uploads answer 202 and report `queued / processing / ready / failed` | Available | v7 |
 | Meaning-based (embedding) search and retrieval-augmented answers | Planned | — |
 | Controlled actions (create / update tickets) with human approval | Planned | — |
 | Model evaluation, monitoring, and safe rollout | Planned | — |
 
 ## 4. Current Architecture
 
-![v6 architecture](docs/architecture/v6.svg)
+![v7 architecture](docs/architecture/v7.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
 a bearer token, and every ticket belongs to exactly one organisation. Every expensive endpoint
 has a per-caller budget — a token bucket held in process memory, checked before the expensive
 work runs. Knowledge-base documents are split into overlapping chunks and stored in PostgreSQL
-with a full-text index. No cache, queue, or external service yet.
+with a full-text index. Since v7 that processing happens in a separate **worker process**
+(`python -m app.worker`): the upload only stores the file and answers 202, and PostgreSQL itself
+is the job queue. No cache, broker or external service yet.
 
 ```
 app/
@@ -62,8 +66,10 @@ app/
 ├── auth/            POST /auth/register, POST /auth/login, get_current_user, the limit dependencies
 ├── classification/  the model + POST /classify   (requires a token since v5)
 ├── tickets/         POST/GET /tickets  (router → service → repository → PostgreSQL)
-└── documents/       POST/GET/DELETE /documents, GET /documents/search
-                     (extraction.py → chunking.py → service → repository → PostgreSQL)
+├── documents/       POST/GET/DELETE /documents, GET /documents/search
+│                    upload: service → repository (document + file, status "queued")
+│                    processing.py: claim → extraction.py → chunking.py → "ready" / "failed"
+└── worker.py        python -m app.worker — the loop that runs processing.py
 ```
 
 ## 5. Request Flow
@@ -107,16 +113,26 @@ client address — there is no user yet — so a refused attempt never reaches b
    any dependency, authentication included ([ADR-020](docs/adr/ADR-020-body-size-limit-before-auth.md)).
 2. `get_current_user`, then `limit_ingestion` (20 uploads a minute per user) → 401 / 429.
 3. The router reads at most 5 MB + 1 byte → 413 if over.
-4. `DocumentService.ingest` hashes the bytes (SHA-256). A file already stored in this organisation
-   → **409**, before any extraction.
-5. `extraction.py` detects the type from the name **and** the first bytes (415 if unsupported),
-   extracts text (pypdf for PDFs; 413 over 300 pages; 422 if unreadable or empty), and removes NUL
-   characters PostgreSQL cannot store.
-6. `chunking.py` splits the text into ≤ 800-character chunks, breaking at a paragraph, then a
-   sentence, then a word, with 100 characters of overlap.
-7. The repository writes the document and all its chunks in **one transaction**. PostgreSQL
-   computes each chunk's `tsvector` and indexes it.
-8. Response: 201 with metadata — never the text itself.
+4. `DocumentService.upload` runs only the cheap checks: type from the name **and** the first bytes
+   (415), SHA-256 already stored in this organisation (409), 50 documents already waiting (**429**,
+   backpressure).
+5. The repository writes the `documents` row (`status = "queued"`) and a `document_files` row
+   holding the bytes, in **one transaction**.
+6. Response: **202** with metadata and `"status": "queued"`, in 154–217 ms for a 300-page PDF.
+
+The worker (`python -m app.worker`, [ADR-021](docs/adr/ADR-021-postgres-table-as-job-queue.md)):
+
+1. Puts documents stuck in `processing` for over 5 minutes (a dead worker) back in the queue.
+2. Claims the oldest `queued` document with `SELECT … FOR UPDATE SKIP LOCKED`. Several workers
+   never take the same one.
+3. Extracts text (pypdf for PDFs; page limit, NUL removal) and splits it into ≤ 800-character
+   chunks with 100 characters of overlap. No transaction is open meanwhile.
+4. In **one transaction**, writes the chunks and the text, sets `ready`, and deletes the file.
+   An unreadable file → `failed` with an `error_message`. An unexpected error → rollback and
+   back to `queued`, up to 3 attempts.
+
+The client follows `GET /documents/{id}` until `status` is `ready` or `failed`. Only `ready`
+documents have chunks, so only they appear in search.
 
 `GET /documents/search?q=…` keeps only letters and digits from the query (so `to_tsquery` syntax
 can never pass through), then runs one SQL query: `WHERE organization_id = … AND search_vector @@
@@ -162,11 +178,14 @@ filtered by it. `users` belong to one organisation and store only a bcrypt hash,
 password. The 13,000 tickets written before v4 were backfilled into a synthetic `default`
 organisation by the migration — intact, but owned by a tenant nobody logs into.
 
-Documents are stored as one `documents` row (metadata, the full extracted text, a SHA-256 of
-the upload) plus N `document_chunks` rows (text, offsets, a generated `tsvector` with a GIN index).
-Chunks carry their own `organization_id` so the tenant filter never depends on a JOIN, and are
-removed by `ON DELETE CASCADE` with their document. The original file bytes are **not** kept
-([ADR-019](docs/adr/ADR-019-store-extracted-text-not-originals.md)).
+Documents are stored as one `documents` row (metadata, processing status, the full extracted
+text, a SHA-256 of the upload) plus N `document_chunks` rows (text, offsets, a generated
+`tsvector` with a GIN index). Chunks carry their own `organization_id` so the tenant filter never
+depends on a JOIN, and are removed by `ON DELETE CASCADE` with their document. The text column is
+*deferred*: it is not read when listing. Uploaded bytes wait in `document_files` only until the
+worker has processed them, and are then deleted, so originals are still not kept
+([ADR-019](docs/adr/ADR-019-store-extracted-text-not-originals.md),
+[ADR-022](docs/adr/ADR-022-waiting-files-in-postgres.md)).
 
 The schema is versioned by Alembic;
 the model file and its metrics are produced at training time.
@@ -185,6 +204,7 @@ the model file and its metrics are produced at training time.
 | Authentication | `bcrypt`, `PyJWT`, `email-validator` | Signed bearer tokens and slow salted hashing; see [ADR-012](docs/adr/ADR-012-bearer-tokens.md) and [ADR-014](docs/adr/ADR-014-bcrypt-password-storage.md) |
 | Rate limiting | Token bucket in `app/core/rate_limit.py` — no library, no Redis | One process needs no shared store; 2 µs per check; see [ADR-016](docs/adr/ADR-016-in-process-token-bucket.md) |
 | Documents | `python-multipart`, `pypdf` | File uploads; pure-Python PDF text extraction with no system libraries |
+| Background work | A worker process + the `documents` table as the queue (`FOR UPDATE SKIP LOCKED`) — no Redis, no Celery | No new service; document and job committed together; see [ADR-021](docs/adr/ADR-021-postgres-table-as-job-queue.md) |
 | Search | PostgreSQL full-text search (`tsvector`, GIN, `ts_rank`) | Stemming and ranking in the database we already run; the baseline embeddings must beat — see [ADR-018](docs/adr/ADR-018-postgres-full-text-search-baseline.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
@@ -194,10 +214,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v6 — Document ingestion and keyword search.** See
-[docs/versions/v6-document-ingestion.md](docs/versions/v6-document-ingestion.md) for the full
+**v7 — Background processing for document ingestion.** See
+[docs/versions/v7-async-processing.md](docs/versions/v7-async-processing.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v6-document-ingestion/README.md](docs/versions/v6-document-ingestion/README.md) for
+[docs/versions/v7-async-processing/README.md](docs/versions/v7-async-processing/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -211,7 +231,8 @@ a short guide.
 | v4 | `v4-authentication` | Every request was anonymous: no row recorded who created it, and any client that could reach the port could read and write every ticket | Complete |
 | v5 | `v5-rate-limiting` | One caller could spend unbounded CPU: `/auth/login` is ~0.7–0.9 s of bcrypt per anonymous attempt, and `/classify` was public. Pagination bounded work per request, not requests per caller | Complete |
 | v6 | `v6-document-ingestion` | A knowledge platform with no knowledge: nowhere to store a document, nothing to read a file, nothing to find a passage | Complete |
-| v7 / v8 | — | Two measured candidates: ingestion blocks the request (300-page PDF 5.8 s) → background processing; keyword search misses paraphrases (hit@3 0.47) → embeddings | Next |
+| v7 | `v7-async-processing` | Extraction ran inside the upload request (300-page PDF ~8 s) and, through the GIL, slowed every other request (`/health` P50 15 ms → 335–729 ms) | Complete |
+| v8 | `v8-embeddings` | Keyword search misses paraphrased questions (hit@3 0.47, 20% empty) | Next |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -220,12 +241,12 @@ authentication did not. Old branches remain on GitHub as engineering history.
 The whole chain in one picture — the problem that forced each version, what changed, and what was
 measured afterwards:
 
-![Architecture evolution, v0 to v6](docs/architecture/evolution.svg)
+![Architecture evolution, v0 to v7](docs/architecture/evolution.svg)
 
 Carried forward, measured but not yet fixed: `total` still costs more than the page it
 accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
-rate-limit buckets live in one process, so every extra worker multiplies the limits; document
-ingestion runs inside the request; keyword search misses paraphrased questions.
+rate-limit buckets live in one process, so every extra worker multiplies the limits; keyword
+search misses paraphrased questions; nothing alerts anyone when the document worker stops.
 
 ## 11. How to Run
 
@@ -248,6 +269,12 @@ alembic upgrade head             # creates the schema
 uvicorn app.main:app
 ```
 
+And, in a second terminal, the worker that processes uploaded documents:
+
+```bash
+python -m app.worker
+```
+
 Interactive API docs: http://127.0.0.1:8000/docs
 
 ```bash
@@ -257,6 +284,7 @@ curl -X POST http://127.0.0.1:8000/tickets -H "Authorization: Bearer $TOKEN" -H 
 curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/tickets?needs_review=true&limit=20"
 curl -X POST http://127.0.0.1:8000/classify -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"text": "I cannot log in"}'
 curl -X POST http://127.0.0.1:8000/documents -H "Authorization: Bearer $TOKEN" -F "file=@evaluation/knowledge_base/refund-policy.md"
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/documents/1     # "queued" → "ready"
 curl -G http://127.0.0.1:8000/documents/search -H "Authorization: Bearer $TOKEN" --data-urlencode "q=how long does a refund take"
 curl -i http://127.0.0.1:8000/tickets     # 401: no token
 ```
@@ -280,9 +308,13 @@ Configuration (environment variables or `.env`, see `.env.example`):
 | `AUTH_RATE_LIMIT_PER_MINUTE` | `10` | Login + registration attempts per client address |
 | `INFERENCE_RATE_LIMIT_PER_MINUTE` | `60` | `/classify` + `POST /tickets` per user, one shared budget |
 | `INGESTION_RATE_LIMIT_PER_MINUTE` | `20` | Document uploads per user |
-| `MAX_DOCUMENT_BYTES` / `MAX_DOCUMENT_PAGES` | `5000000` / `300` | Upload ceilings; larger → 413 |
+| `MAX_DOCUMENT_BYTES` / `MAX_DOCUMENT_PAGES` | `5000000` / `300` | Upload ceilings; larger → 413 (bytes) or `failed` (pages) |
 | `CHUNK_MAX_CHARS` / `CHUNK_OVERLAP_CHARS` | `800` / `100` | Chunk size and overlap |
 | `MAX_SEARCH_RESULTS` | `20` | Ceiling on `limit` for `/documents/search` |
+| `WORKER_POLL_SECONDS` | `1.0` | How often an idle worker checks for queued documents |
+| `WORKER_STALE_AFTER_SECONDS` | `300` | A document `processing` longer than this is treated as abandoned and requeued |
+| `WORKER_MAX_ATTEMPTS` | `3` | Tries per document for unexpected errors |
+| `MAX_PENDING_DOCUMENTS_PER_ORGANIZATION` | `50` | Queue ceiling per organisation; above it uploads get 429 |
 | `LOG_LEVEL` | `INFO` | Python logging level |
 
 The Compose credentials are local development values only. Real deployments take them from the
@@ -300,7 +332,7 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-180 tests, about 187 seconds — most of it bcrypt doing its job (see §15):
+196 tests, 402 seconds in the v7 session (on battery, with other work running — not comparable to v6's 187 s) — most of it bcrypt doing its job (see §15):
 
 - **Document pipeline, no HTTP and no database** (29 tests) — chunks never exceed the maximum;
   offsets point at the exact text; **no character of the document is lost**; neighbours overlap;
@@ -308,12 +340,19 @@ pytest -v
   without a byte-order mark, PDFs page by page (built in memory by `tests/pdf_factory.py`), a `.pdf`
   name without the PDF signature refused, corrupt and text-less PDFs refused, the page limit applied
   before extraction, NUL characters removed.
-- **Documents API** (31 tests) — upload, title derivation, duplicates (409) per organisation,
-  six kinds of unusable file with nothing stored, size limits, cross-tenant 404 on read, delete and
-  search, stemming, `any` vs `all`, operator characters in the query made harmless, bounded results,
-  storage failure → 503 on all five endpoints, **a failed chunk insert leaves no document behind**
-  (and is reported as 503, not mistaken for a duplicate), an oversized body refused before
-  authentication, and a per-user upload budget that reads do not spend.
+- **Documents API** (35 tests) — upload answers 202 `queued` and becomes `ready` after the worker
+  runs; a queued document is not yet searchable; title derivation; duplicates (409) per
+  organisation, even while queued; unsupported types refused at upload (415), unreadable files
+  `failed` with a reason; the page limit; a full queue → 429; deleting a queued document removes
+  its file; cross-tenant 404 on read, delete and search; stemming, `any` vs `all`, harmless
+  operator characters, bounded results; storage failure → 503 on all five endpoints; an oversized
+  body refused before authentication; a per-user upload budget that reads do not spend.
+- **Worker** (12 tests) — oldest first; **two workers never take the same document** (SKIP
+  LOCKED, with a real second session holding the lock); a failure while saving leaves no chunks
+  and requeues; repeated failures end in `failed`; a document deleted mid-processing is discarded;
+  a worker that was replaced throws its result away; abandoned documents are requeued, or failed
+  when out of attempts, and fresh ones are left alone; the loop survives a database error; and the
+  worker process, started in a **fresh interpreter**, knows every table it writes.
 
 - **Rate limiting** — the token bucket tested with a fake clock (time moved by assignment, so the
   tests are exact and instant): burst then refuse, exact `Retry-After`, refill, no saving up beyond
@@ -405,6 +444,8 @@ method on identical questions, not a claim about real-world accuracy.
 - [ADR-018 — Chunks in PostgreSQL, with full-text search as the retrieval baseline](docs/adr/ADR-018-postgres-full-text-search-baseline.md)
 - [ADR-019 — Store the extracted text, not the original file](docs/adr/ADR-019-store-extracted-text-not-originals.md)
 - [ADR-020 — Refuse oversized request bodies before authentication](docs/adr/ADR-020-body-size-limit-before-auth.md)
+- [ADR-021 — Use the documents table as the job queue](docs/adr/ADR-021-postgres-table-as-job-queue.md)
+- [ADR-022 — Keep waiting files in PostgreSQL until they are processed](docs/adr/ADR-022-waiting-files-in-postgres.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -512,6 +553,26 @@ that selects almost everything.
 An anonymous 200 MB upload was answered 401 only after being received in full (4,146 ms). With the
 body-size middleware, 413 comes from the headers alone in **1.4–3.2 ms**.
 
+**v7 — background processing**, `scripts/measure_async_ingestion.py`, one API process and one
+worker, `DB_ECHO=false`. The laptop was **on battery**, so v6 (run from an export of `main`
+against its own database) and v7 were alternated in the same session, two valid rounds each. A
+third v7 round was discarded because the machine suspended mid-run.
+
+| P50 | v6 | v7 |
+|---|---|---|
+| Upload answers — 300-page PDF / 4.9 MB text | 7,848–8,144 ms / 10,324–11,343 ms | **154–217 ms / 775–854 ms** |
+| Ready to search — 300-page PDF / 4.9 MB text | same as the answer | 8,518–9,543 ms / 9,834–11,360 ms |
+| `GET /health` while 4 × 300-page PDFs process (quiet ≈ 15 ms) | 335–729 ms (P95 2,220–2,979) | **17–21 ms** (P95 34–134) |
+| All 4 PDFs ready | 33.0–36.4 s | 31.6–53.3 s (one worker, in series) |
+
+The processing costs the same. It no longer runs in the process that answers requests, so
+the GIL no longer makes other users wait. Two things measurement found that the tests had not:
+listing read the whole `content` column for every row (5 rows with 4.9 MB documents: **153.5 ms →
+3.4 ms** once deferred, timed in-process), and the worker process could not save anything at all,
+because it never imported the `users` and `organizations` models. The worker's crash recovery was
+also seen outside a test: a worker killed mid-document left it `processing`, and the next worker
+logged `1 requeued` and finished it.
+
 Listing, with 13,000 rows in the table (client-measured, includes client JSON parsing):
 
 | Version | Request | Rows returned | Time |
@@ -556,7 +617,7 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
    `BrokenRepository` double broke in **both** v3 and v4 for the same structural reason: N
    implementations means N manual edits with no compiler help. mypy or Pyright would have caught
    all of them.
-7. *The test suite takes 187 seconds* (180 tests; 103 s in v4), which is approaching the point where it stops being run
+7. *The test suite takes 187–402 seconds* (196 tests; 103 s in v4), which is approaching the point where it stops being run
    often enough to be useful. Both standard fixes cost something real: a lower bcrypt cost factor
    in tests means no longer testing the production configuration, and session-scoping the
    registration means tests share a user.
@@ -577,9 +638,10 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
     No measurement asks for it yet.
 14. *Behind a reverse proxy, every caller would share the proxy's address* and therefore one auth
     budget. `X-Forwarded-For` is deliberately ignored until a proxy we control sets it.
-15. *Document ingestion blocks the request.* A 300-page PDF holds a worker for 5.8 s, a 4.9 MB text
-    file for 8.4 s. A few simultaneous uploads would occupy the thread pool. Trigger for
-    background processing.
+15. *A stopped worker is silent.* Uploads keep succeeding and stay `queued`, and nothing alerts
+    anyone. Queue depth and the age of the oldest queued document are the first metrics needed.
+    One worker processes documents in series; a document abandoned by a crashed worker waits
+    5 minutes before it is retried.
 16. *Keyword search misses meaning.* Paraphrase hit@3 is 0.47, and 20% of paraphrases return
     nothing. Trigger for embeddings.
 17. *Search cost grows with the number of matching chunks*, not with `limit` — v3's problem, inside
