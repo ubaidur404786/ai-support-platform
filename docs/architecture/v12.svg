@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="900" viewBox="0 0 1040 900" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c62828"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="900" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v12 — Model service: the answer model in its own process, with a bounded queue</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: the model lived in every API process (2,380 MB each) and nothing limited the line: 8 users → slowest answer 99 s.</text>
+  <text x="30" y="74" fill="#1565c0">FIX: one model service process owns the model; the API calls it over HTTP; at most 4 answers run or wait, the 5th gets 503 + Retry-After at once.</text>
+
+  <!-- API process -->
+  <rect x="20" y="92" width="440" height="430" rx="8" fill="none" stroke="#333" stroke-dasharray="5,4"/>
+  <text x="34" y="112" font-size="12" font-weight="bold" fill="#333" letter-spacing="1">API PROCESS(ES) — app/main.py · ~1 GB each · no model</text>
+
+  <rect x="40" y="126" width="400" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="145" font-weight="bold" fill="#222" font-size="12">POST /answers  or  POST /answers/stream</text>
+  <text x="52" y="162" fill="#333" font-size="11">{"question": "How do I cancel my subscription?"}</text>
+  <line x1="240" y1="170" x2="240" y2="190" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="192" width="400" height="60" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="211" font-weight="bold" fill="#222" font-size="12">router.py → service.py (unchanged since v11)</text>
+  <text x="52" y="228" fill="#333" font-size="11">token · rate limit · retrieve (embeddings + pgvector)</text>
+  <text x="52" y="244" fill="#333" font-size="11">threshold 0.30 · build the prompt (3 sources + question)</text>
+  <line x1="240" y1="252" x2="240" y2="272" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="274" width="400" height="92" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="293" font-weight="bold" fill="#222" font-size="12">generator.py — now an HTTP client (httpx)</text>
+  <text x="52" y="311" fill="#333" font-size="11">generate() → POST /generate · generate_stream() → POST /generate/stream</text>
+  <text x="52" y="327" fill="#333" font-size="11">down / timeout 120 s → GenerationUnavailable → 503</text>
+  <text x="52" y="343" fill="#333" font-size="11">busy → GenerationBusy → 503 + Retry-After: 10</text>
+  <text x="52" y="359" fill="#666" font-size="10">streams: status checked BEFORE the API's first line, so 503 stays a 503</text>
+
+  <rect x="40" y="386" width="400" height="120" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="405" font-weight="bold" fill="#222" font-size="12">Responses (unchanged, plus one new case)</text>
+  <text x="52" y="423" fill="#333" font-size="11">200 {"answer": "Workspace owners can cancel from…", "sources": [...]}</text>
+  <text x="52" y="439" fill="#333" font-size="11">200 NDJSON: sources → text … → done</text>
+  <text x="52" y="455" fill="#1565c0" font-size="11">NEW 503 {"detail": "The answer model is busy; try again shortly"}</text>
+  <text x="52" y="471" fill="#1565c0" font-size="11">          header Retry-After: 10   (in ≤ 1.1 s, no model time spent)</text>
+  <text x="52" y="490" fill="#333" font-size="11">503 "…try GET /documents/search?mode=semantic" when the service is down</text>
+
+  <!-- HTTP arrows -->
+  <line x1="440" y1="305" x2="560" y2="200" stroke="#1565c0" stroke-width="1.6" marker-end="url(#arrow-blue)"/>
+  <text x="452" y="238" fill="#1565c0" font-size="11">HTTP :8001</text>
+  <text x="452" y="252" fill="#1565c0" font-size="10">{"messages": [...], "max_tokens": 200}</text>
+  <line x1="560" y1="420" x2="440" y2="340" stroke="#1565c0" stroke-width="1.6" marker-end="url(#arrow-blue)"/>
+  <text x="462" y="400" fill="#1565c0" font-size="10">{"text": "…"} / 503 busy</text>
+
+  <!-- Model service -->
+  <rect x="560" y="92" width="460" height="430" rx="8" fill="none" stroke="#1565c0" stroke-dasharray="5,4"/>
+  <text x="574" y="112" font-size="12" font-weight="bold" fill="#1565c0" letter-spacing="1">MODEL SERVICE — app/model_service/ · ONE process · NEW</text>
+  <text x="574" y="128" fill="#666" font-size="10">runs AI inference separately from the main API · uvicorn app.model_service.main:app --port 8001</text>
+
+  <rect x="580" y="140" width="420" height="92" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="592" y="159" font-weight="bold" fill="#222" font-size="12">main.py — enter_queue(): MODEL_MAX_QUEUE = 4</text>
+  <text x="592" y="177" fill="#333" font-size="11">running + waiting &lt; 4 → take a place, continue</text>
+  <text x="592" y="193" fill="#c62828" font-size="11">4 already → 503 "The model is busy", Retry-After: 10</text>
+  <text x="592" y="209" fill="#333" font-size="11">leave_queue() in "finally": after answers, streams, crashes</text>
+  <text x="592" y="225" fill="#666" font-size="10">backpressure: tell the caller "later" instead of letting work pile up</text>
+  <line x1="790" y1="232" x2="790" y2="252" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="580" y="254" width="420" height="92" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="592" y="273" font-weight="bold" fill="#222" font-size="12">model.py — the lock, then llama.cpp (moved from the API)</text>
+  <text x="592" y="291" fill="#333" font-size="11">Qwen2.5-1.5B-Instruct q4 GGUF · temperature 0 · one answer at a time</text>
+  <text x="592" y="307" fill="#333" font-size="11">loaded once at start (lifespan) — the only copy on the machine</text>
+  <text x="592" y="323" fill="#333" font-size="11">log: "answer: waited 8.4 s for the model, generated in 5.7 s"</text>
+  <text x="592" y="339" fill="#666" font-size="10">only file allowed to use llama_cpp (a test checks it)</text>
+  <line x1="790" y1="346" x2="790" y2="366" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="580" y="368" width="420" height="60" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="592" y="387" font-weight="bold" fill="#222" font-size="12">POST /generate → {"text": "…"}</text>
+  <text x="592" y="404" fill="#333" font-size="11">POST /generate/stream → {"text": "…"} lines, or {"error": "…"}</text>
+  <text x="592" y="420" fill="#333" font-size="11">no model loaded → 503 · request invalid → 422</text>
+
+  <rect x="580" y="440" width="420" height="66" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="592" y="459" font-weight="bold" fill="#222" font-size="12">GET /health</text>
+  <text x="592" y="476" fill="#333" font-size="11">{"status": "ok", "model_loaded": true, "in_queue": 0, "max_queue": 4}</text>
+  <text x="592" y="493" fill="#666" font-size="10">the line of waiting answers is now visible</text>
+
+  <!-- Measurements -->
+  <text x="30" y="552" font-size="12" font-weight="bold" fill="#222" letter-spacing="1">MEASURED LOCALLY — CPU laptop (i5-13420H, 8 GB RAM, ~400 MB free), scripts/load_test_answers.py, 3 different questions per user</text>
+
+  <rect x="20" y="564" width="330" height="150" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="32" y="584" font-weight="bold" fill="#222" font-size="12">8 simultaneous users (24 questions)</text>
+  <text x="32" y="604" fill="#c62828" font-size="11">v11 in the API: P50 59.0 s · P95 93.0 · max 99.1 s</text>
+  <text x="32" y="620" fill="#333" font-size="11">service, no limit: 53.9 · 93.2 · 93.4 s</text>
+  <text x="32" y="636" fill="#1565c0" font-size="11">queue 4, run 2: 32.8 · 43.6 · 52.2 s, 12 busy</text>
+  <text x="32" y="652" fill="#333" font-size="11">queue 4, run 1: 29.5 · 88.8 · 93.4 s, 12 busy</text>
+  <text x="32" y="668" fill="#333" font-size="11">queue 4, 8 users alone: 33.5 · 38.2 · 38.4 s</text>
+  <text x="32" y="688" fill="#666" font-size="10">busy answers returned in ≤ 1.1 s · run 1's 93 s was</text>
+  <text x="32" y="702" fill="#666" font-size="10">before the timing log existed: cause unknown</text>
+
+  <rect x="360" y="564" width="320" height="150" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="372" y="584" font-weight="bold" fill="#222" font-size="12">Memory (Windows private bytes)</text>
+  <text x="372" y="604" fill="#c62828" font-size="11">v11: 1 API process = 2,380 MB</text>
+  <text x="372" y="620" fill="#1565c0" font-size="11">v12: API 981 MB + model service 1,802 MB</text>
+  <text x="372" y="636" fill="#1565c0" font-size="11">v12, --workers 2: 983 + 849 + 1,815 MB</text>
+  <text x="372" y="652" fill="#333" font-size="11">v11, 2 workers: not run (~4.8 GB estimated)</text>
+  <text x="372" y="676" fill="#666" font-size="10">with 2 workers one API worker died silently at</text>
+  <text x="372" y="690" fill="#666" font-size="10">the first 4 questions (~400 MB free); uvicorn</text>
+  <text x="372" y="704" fill="#666" font-size="10">restarted it; 7 of 8 answered</text>
+
+  <rect x="690" y="564" width="330" height="150" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="702" y="584" font-weight="bold" fill="#222" font-size="12">What did NOT change</text>
+  <text x="702" y="604" fill="#333" font-size="11">answers / min: 4–11 in every setup, 1–8 users</text>
+  <text x="702" y="620" fill="#333" font-size="11">(one CPU, one model — no speed-up claimed)</text>
+  <text x="702" y="640" fill="#333" font-size="11">/health P50: 21–31 ms in every setup</text>
+  <text x="702" y="656" fill="#333" font-size="11">(llama.cpp releases the GIL — not a reason)</text>
+  <text x="702" y="676" fill="#333" font-size="11">generation per answer: 3.4–18.7 s (logged)</text>
+  <text x="702" y="692" fill="#333" font-size="11">longest wait: 47.9 s with 3 answers ahead</text>
+  <text x="702" y="706" fill="#666" font-size="10">the limit bounds HOW MANY wait, not how long</text>
+
+  <!-- Next limitation -->
+  <rect x="20" y="734" width="1000" height="146" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="34" y="756" font-weight="bold" fill="#c62828" font-size="13">NEXT LIMITATION</text>
+  <text x="34" y="778" fill="#333" font-size="12">• Capacity is one CPU: 5–10 answers a minute; half of 8 simultaneous users are told "busy". Real capacity needs a GPU + a batching engine (v15-llm-serving).</text>
+  <text x="34" y="798" fill="#333" font-size="12">• Repeated questions ("How do I reset my password?") cost the full 6–10 s every time → candidate v13-caching, after measuring how often questions repeat.</text>
+  <text x="34" y="818" fill="#333" font-size="12">• The API's own /health does not check the model service; it finds out only when an answer fails.</text>
+  <text x="34" y="838" fill="#333" font-size="12">• Three processes to run (API, worker, model service) and the laptop is at its memory limit (~400 MB free).</text>
+  <text x="34" y="858" fill="#333" font-size="12">• Still open from before: wrong answers not detected at runtime; retrieval misses paraphrases (sources right 0.80).</text>
+</svg>

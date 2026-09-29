@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1734" viewBox="0 0 1180 1734" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1836" viewBox="0 0 1180 1836" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
   <defs>
     <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
       <path d="M0,0 L8,4 L0,8 z" fill="#444"/>
     </marker>
   </defs>
 
-  <rect width="1180" height="1734" fill="#ffffff"/>
+  <rect width="1180" height="1836" fill="#ffffff"/>
 
-  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v11</text>
+  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v12</text>
   <text x="30" y="58" fill="#555">Each version exists because the previous one produced a measured limitation. Red = the problem. Blue = the change. Grey = what was measured.</text>
 
   <!-- ============ SECTION A: how the request path changed ============ -->
@@ -340,10 +340,31 @@
   <text x="896" y="1578" font-size="11" fill="#222">first token: 7.35 s (396 tok) / 2.81 s (173)</text>
   <text x="896" y="1600" font-size="10" fill="#777">same answer 25/25. 226 tests.</text>
 
+  <!-- row v12 -->
+  <rect x="30" y="1624" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="1667" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v12</text>
+  <text x="85" y="1683" text-anchor="middle" font-size="10" fill="#666">model service</text>
+  <rect x="146" y="1624" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="1644" font-size="11" fill="#333">Load test first: 4–11 answers/min for 1–8 users;</text>
+  <text x="158" y="1660" font-size="11" fill="#333">8 users → slowest answer 99 s. Model inside every</text>
+  <text x="158" y="1676" font-size="11" fill="#333">API process: 2,380 MB each, ~440 MB free RAM.</text>
+  <text x="158" y="1698" font-size="11" fill="#c62828">Problem: API and model welded together; no limit on the line.</text>
+  <rect x="526" y="1624" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="1644" font-size="11" fill="#333">app/model_service/: one FastAPI process owns the model;</text>
+  <text x="538" y="1660" font-size="11" fill="#333">API calls it over HTTP (httpx). At most 4 answers run</text>
+  <text x="538" y="1676" font-size="11" fill="#333">or wait; the 5th gets 503 + Retry-After in ≤ 1.1 s.</text>
+  <text x="538" y="1698" font-size="10" fill="#777">Logs wait vs generation time per answer. Not faster:</text>
+  <text x="538" y="1710" font-size="10" fill="#777">throughput unchanged (one CPU).</text>
+  <rect x="884" y="1624" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="1644" font-size="11" fill="#222">API process: 2,380 → 981 MB</text>
+  <text x="896" y="1662" font-size="11" fill="#222">8 users max: 99 s → 38–52 s (2 of 3 runs)</text>
+  <text x="896" y="1680" font-size="11" fill="#222">half of 8 users refused as busy</text>
+  <text x="896" y="1702" font-size="10" fill="#777">1 run still 93 s max (cause unknown). 238 tests.</text>
+
   <!-- next -->
-  <rect x="30" y="1636" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
-  <text x="44" y="1658" font-size="12" font-weight="bold" fill="#222">Open after v11 — what the next versions must answer</text>
-  <text x="44" y="1678" font-size="11.5" fill="#333">1. One model object, one lock, inside each API process; prefill on CPU dominates → a separate model service (v12), measured with a concurrent-users load test first.</text>
-  <text x="44" y="1694" font-size="11.5" fill="#333">2. Paraphrase misses (sources right 80%) — needs a bigger evaluation set.   3. Wrong answers not detected at runtime.   4. Embedding at 1–10 chunks/s.</text>
-  <text x="44" y="1710" font-size="11.5" fill="#333">5. Per-process rate limits.   6. Nothing alerts on a stopped worker.   7. No token revocation, no type checker.   8. Test suite runtime keeps growing.</text>
+  <rect x="30" y="1738" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
+  <text x="44" y="1760" font-size="12" font-weight="bold" fill="#222">Open after v12 — what the next versions must answer</text>
+  <text x="44" y="1780" font-size="11.5" fill="#333">1. Capacity is one CPU (5–10 answers/min) → GPU + batching engine later (v15-llm-serving).   2. Repeated questions recomputed → caching (v13), if they repeat.</text>
+  <text x="44" y="1796" font-size="11.5" fill="#333">3. API /health blind to the model service.   4. Paraphrase misses (sources right 80%).   5. Wrong answers not detected at runtime.   6. Per-process rate limits.</text>
+  <text x="44" y="1812" font-size="11.5" fill="#333">7. Nothing alerts on a stopped worker or model service.   8. No token revocation, no type checker.   9. Laptop at its memory limit.</text>
 </svg>

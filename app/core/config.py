@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.11.0"
+    app_version: str = "0.12.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -128,6 +128,23 @@ class Settings(BaseSettings):
     # Upper bound on the answer's length, in tokens (roughly 3/4 of a word each).
     # Generation time grows with it, so it caps the work one request can cause.
     answer_max_tokens: int = 200
+    # The model service (v12): the separate process that runs the language
+    # model (uvicorn app.model_service.main:app --port 8001). The API calls it
+    # over HTTP; only the model service reads generation_model_path.
+    model_service_url: str = "http://127.0.0.1:8001"
+    # How long the API waits for the model service to send the next bytes. For
+    # a whole answer that includes its time in the queue: at most
+    # model_max_queue answers of ~6-10 s each, so 120 s is a generous ceiling.
+    model_service_timeout_seconds: float = 120.0
+    # Answers the model service lets run or wait at once. One more is refused
+    # with 503 "busy" in about a second. Measured in v12 on this laptop: 5-10
+    # answers a minute whatever the number of users (one CPU, one model), so
+    # the 4th in line waits for 3 answers, ~25-30 s - where 8 users without a
+    # limit waited up to 99 s. It bounds how MANY wait, not how long: when
+    # answers slowed to 15-18 s each, a wait reached 48 s.
+    model_max_queue: int = 4
+    # What a "busy" 503 tells the client: try again after this many seconds.
+    model_busy_retry_after_seconds: int = 10
     # POST /answers per user. Its own budget: one answer costs seconds of CPU,
     # about a thousand times a /classify call.
     answer_rate_limit_per_minute: int = 10

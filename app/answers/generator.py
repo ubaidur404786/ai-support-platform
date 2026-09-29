@@ -1,100 +1,103 @@
-"""Run the local language model that writes answers.
+"""Ask the model service to write an answer.
 
-The model is Qwen2.5-1.5B-Instruct, a small open model trained to follow
-instructions, stored as one GGUF file: the model's weights compressed to about
-4 bits per number (~1.1 GB instead of ~3 GB), in the format llama.cpp reads.
-llama.cpp is a C++ inference engine built to run such models on an ordinary CPU.
+Since v12 the language model does not run inside the API. It runs in its own
+process, the model service (app/model_service/main.py), and this module calls
+it over HTTP. The rest of the API does not notice: generate() still returns
+the reply, generate_stream() still gives it piece by piece, and every failure
+still becomes GenerationUnavailable (503).
+
+What the API gains: an API process no longer holds the 1.1 GB model, so more
+API processes fit on one machine and all of them share one model and one queue.
+What it costs: a network call per answer (milliseconds next to seconds of
+generation), and one more process that can be down.
 """
 
-import logging
-import threading
+import json
 from collections.abc import Iterator
-from functools import lru_cache
+
+import httpx
 
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
-
-# How many tokens the model can read and write in one request: the system
-# instructions, the sources, the question AND the answer. 3 sources of ~800
-# characters (~200 tokens each) plus the rest fit comfortably.
-CONTEXT_TOKENS = 2048
-
-# One model object must not be used by two threads at once. FastAPI runs
-# endpoints in a thread pool, so two simultaneous questions would do exactly
-# that. The lock makes them take turns: the second waits for the first. That
-# is the honest capacity of one CPU process (measured in v10).
-_generation_lock = threading.Lock()
-
 
 class GenerationUnavailable(Exception):
-    """The model file is missing or the model could not run. Becomes 503."""
+    """The model service is down, has no model, or failed. Becomes 503."""
 
 
-@lru_cache(maxsize=1)
-def _load_model(model_path: str):
-    """Load the model once per process and keep it in memory (like embeddings.py)."""
-    # llama-cpp-python: Python bindings for llama.cpp. Imported here so that
-    # processes that never generate (the worker, most tests) never load it.
-    from llama_cpp import Llama
+class GenerationBusy(GenerationUnavailable):
+    """The model service's queue is full. Becomes 503 with Retry-After."""
 
-    logger.info("Loading generation model %s", model_path)
-    return Llama(model_path=model_path, n_ctx=CONTEXT_TOKENS, verbose=False)
+    def __init__(self, retry_after: str) -> None:
+        super().__init__("The answer model is busy")
+        self.retry_after = retry_after
 
 
-def generate(messages: list[dict], max_tokens: int, model_path: str = settings.generation_model_path) -> str:
-    """Return the model's reply to a chat: a list of {"role": ..., "content": ...}.
+# One client for the whole process: it keeps connections to the model service
+# open and reuses them, instead of opening a new one for every answer.
+# The read timeout is how long we wait for the next bytes: for /generate that
+# is the whole answer, including its time in the service's queue.
+_client = httpx.Client(
+    base_url=settings.model_service_url,
+    timeout=httpx.Timeout(settings.model_service_timeout_seconds, connect=2.0),
+)
 
-    temperature=0 means "always pick the most likely next word": the same
-    question and sources give the same answer, which makes answers testable
-    and evaluation repeatable. Creativity is not what a support answer needs.
-    """
+
+def _check(response: httpx.Response) -> None:
+    """Turn an error response from the model service into our exceptions."""
+    if response.status_code == 503 and "Retry-After" in response.headers:
+        raise GenerationBusy(response.headers["Retry-After"])
+    if response.status_code != 200:
+        raise GenerationUnavailable(f"Model service answered {response.status_code}")
+
+
+def generate(messages: list[dict], max_tokens: int) -> str:
+    """Return the model's whole reply to a chat: a list of {"role": ..., "content": ...}."""
     try:
-        model = _load_model(model_path)
-        with _generation_lock:
-            output = model.create_chat_completion(
-                messages=messages, max_tokens=max_tokens, temperature=0
-            )
-    except Exception as error:
-        # A missing file, a corrupt download, out of memory.
-        raise GenerationUnavailable("The answer model is unavailable") from error
-    return output["choices"][0]["message"]["content"].strip()
+        response = _client.post("/generate", json={"messages": messages, "max_tokens": max_tokens})
+    except httpx.HTTPError as error:
+        # Not running, not reachable, or took longer than the timeout.
+        raise GenerationUnavailable("The model service is unreachable") from error
+    _check(response)
+    return response.json()["text"]
 
 
-def load_model(model_path: str = settings.generation_model_path) -> None:
-    """Load the model now, or raise GenerationUnavailable.
+def generate_stream(messages: list[dict], max_tokens: int) -> Iterator[str]:
+    """Start an answer now, then give its pieces as the model writes them.
 
-    Used before a streamed answer starts: once the first line of a stream has
-    been sent, the status code (200) cannot be changed any more, so "the model
-    is missing" must be discovered before that - and become a normal 503.
+    Not a generator itself, on purpose: the connection is opened and the status
+    checked HERE, when the function is called. So "down" or "busy" is raised
+    before the API sends the first line of its own stream, and can still become
+    a normal 503. Only the reading of the pieces is left for later.
     """
+    request = _client.build_request(
+        "POST", "/generate/stream", json={"messages": messages, "max_tokens": max_tokens}
+    )
     try:
-        _load_model(model_path)
-    except Exception as error:
-        raise GenerationUnavailable("The answer model is unavailable") from error
+        # stream=True: return as soon as the status and headers arrive,
+        # without waiting for the body.
+        response = _client.send(request, stream=True)
+    except httpx.HTTPError as error:
+        raise GenerationUnavailable("The model service is unreachable") from error
+    try:
+        _check(response)
+    except GenerationUnavailable:
+        response.close()
+        raise
+    return _pieces(response)
 
 
-def generate_stream(
-    messages: list[dict], max_tokens: int, model_path: str = settings.generation_model_path
-) -> Iterator[str]:
-    """Like generate(), but yield the reply in small pieces as the model writes them.
-
-    The model produces an answer one token (a word or part of a word) at a time.
-    generate() waits for the last one; this hands each piece over at once, so a
-    person starts reading after the first piece instead of after the whole answer.
-
-    The lock is held for the whole answer, including while the caller is still
-    sending pieces to the client. If the client disconnects, Python closes this
-    generator, and the "with" block releases the lock.
-    """
-    model = _load_model(model_path)
-    with _generation_lock:
-        chunks = model.create_chat_completion(
-            messages=messages, max_tokens=max_tokens, temperature=0, stream=True
-        )
-        for chunk in chunks:
-            # Each chunk holds the newly written text under "delta"; the first
-            # and last ones carry no text, only bookkeeping.
-            piece = chunk["choices"][0]["delta"].get("content")
-            if piece:
-                yield piece
+def _pieces(response: httpx.Response) -> Iterator[str]:
+    try:
+        for line in response.iter_lines():
+            if not line:
+                continue
+            event = json.loads(line)
+            if "error" in event:
+                raise GenerationUnavailable(event["error"])
+            yield event["text"]
+    except httpx.HTTPError as error:
+        raise GenerationUnavailable("The model service stopped mid-answer") from error
+    finally:
+        # Also runs when our own client disconnects and this generator is
+        # closed: the model service sees the connection close and stops writing.
+        response.close()

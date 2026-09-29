@@ -7,8 +7,7 @@ from collections.abc import Iterator
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.answers import generator
-from app.answers.generator import GenerationUnavailable
+from app.answers.generator import GenerationBusy, GenerationUnavailable
 from app.answers.schemas import AnswerRequest, AnswerResponse, AnswerSource
 from app.answers.service import AnswerService
 from app.auth.dependencies import get_current_user, limit_answers
@@ -43,6 +42,14 @@ def to_http_error(error: Exception) -> HTTPException:
     if isinstance(error, EmbeddingUnavailable):
         logger.exception("Embedding model unavailable")
         return HTTPException(status_code=503, detail="Answers are unavailable: search model not loaded")
+    if isinstance(error, GenerationBusy):
+        # Every answer place in the model service is taken. Not a failure:
+        # the same question will very likely work a few seconds later.
+        return HTTPException(
+            status_code=503,
+            detail="The answer model is busy; try again shortly",
+            headers={"Retry-After": error.retry_after},
+        )
     if isinstance(error, GenerationUnavailable):
         logger.exception("Generation model unavailable")
         # Search still works; the client can fall back to showing search results.
@@ -72,9 +79,10 @@ def to_sources(hits: list[SearchHit]) -> list[AnswerSource]:
     ]
 
 
-# Plain "def": generation is CPU work in C++ code, so FastAPI runs it in its
-# thread pool and the event loop stays free for other requests (/health).
-# The caller waits for the whole answer - seconds on a CPU (measured in v10).
+# Plain "def": waiting for the model service is a blocking HTTP call (httpx's
+# normal client), so FastAPI runs it in its thread pool and the event loop
+# stays free for other requests (/health). The caller waits for the whole
+# answer - seconds on a CPU (measured in v10).
 @router.post("/answers", response_model=AnswerResponse)
 def answer_question(
     payload: AnswerRequest,
@@ -119,8 +127,7 @@ def stream_answer(
     # failure can only be reported inside the stream.
     try:
         sources = service.retrieve(current_user.organization_id, payload.question)
-        if sources:
-            generator.load_model()
+        events = service.open_stream(payload.question, sources)
     except ANSWER_ERRORS as error:
         raise to_http_error(error)
 
@@ -129,12 +136,12 @@ def stream_answer(
             event = {"type": "sources", "sources": [s.model_dump() for s in to_sources(sources)]}
             yield json.dumps(event) + "\n"
         try:
-            for event in service.stream(payload.question, sources):
+            for event in events:
                 yield json.dumps(event) + "\n"
         except Exception:
             logger.exception("Generation failed while streaming")
             yield json.dumps({"type": "error", "detail": "The answer could not be finished"}) + "\n"
 
     # A plain (non-async) generator: Starlette runs it in its thread pool, one
-    # next() at a time, so the event loop is never blocked by the model.
+    # next() at a time, so the event loop is never blocked while it waits.
     return StreamingResponse(lines(), media_type="application/x-ndjson")

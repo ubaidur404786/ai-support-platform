@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v11 — Answer streaming** (branch `v11-answer-streaming`)
+**Current version: v12 — Model service** (branch `v12-model-service`)
 
 ## 1. Project Overview
 
@@ -16,7 +16,7 @@ The engineering goal is a production-style AI system whose every component can b
 what problem forced it in, what it costs, and what happens when it fails. The architecture
 history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
 `v3-pagination`, `v4-authentication`, `v5-rate-limiting`, `v6-document-ingestion`,
-`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, `v10-rag`, `v11-answer-streaming`, ...)
+`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, `v10-rag`, `v11-answer-streaming`, `v12-model-service`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -48,7 +48,7 @@ a human steps in where the model is unsure rather than everywhere.
 
 ## 4. Current Architecture
 
-![v11 architecture](docs/architecture/v11.svg)
+![v12 architecture](docs/architecture/v12.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
@@ -63,7 +63,10 @@ from a small local model run by ONNX Runtime), and search can compare meaning in
 nearest ones itself through an HNSW index. Since v10, `POST /answers` turns the closest chunks into
 a short answer with a small local language model (llama.cpp, CPU), and refuses when nothing
 relevant was found. Since v11 the same answer can be streamed as it is written
-(`POST /answers/stream`). No cache, broker or external service yet.
+(`POST /answers/stream`). Since v12 the language model runs in its own process, the **model
+service** (`uvicorn app.model_service.main:app --port 8001`), which the API calls over HTTP. It is
+the only copy of the model on the machine, and it lets at most 4 answers run or wait: one more is
+refused at once with 503 and `Retry-After`. No cache or broker yet.
 
 ```
 app/
@@ -78,6 +81,10 @@ app/
 │                    upload: service → repository (document + file, status "queued")
 │                    processing.py: claim → extraction.py → chunking.py → embeddings.py → "ready" / "failed"
 │                    embeddings.py: the local embedding model (text → 384 numbers)
+├── answers/         POST /answers, POST /answers/stream (router → service → generator.py, an
+│                    HTTP client for the model service)
+├── model_service/   a separate app: main.py (queue limit, /generate, /generate/stream, /health),
+│                    model.py (llama.cpp — the only code that loads the answer model)
 └── worker.py        python -m app.worker — loads the model, then runs processing.py in a loop
 ```
 
@@ -89,6 +96,12 @@ otherwise the model answers from those chunks only (~7 s on this CPU, one answer
 process) → a reply of "I don't know" also becomes `answered: false`. The response always lists the
 chunks the model saw as numbered `sources`. The model cannot be loaded → **503** "try GET
 /documents/search?mode=semantic".
+
+Since v12 "the model answers" is an HTTP call: `generator.py` → `POST http://127.0.0.1:8001/generate`
+`{"messages": [...], "max_tokens": 200}` → the model service takes one of its 4 queue places, waits
+for the model's lock, and returns `{"text": "..."}`. Queue full → the service answers 503 +
+`Retry-After: 10` in about a second, and the API passes it on as **503** "The answer model is busy;
+try again shortly" with the same header. Service down or silent for 120 s → 503 as above.
 
 `POST /answers/stream` (v11): the same checks run **before** the first byte (422 / 429 / 503 keep
 their status codes), then one NDJSON line per event: `sources` (~0.15 s), `text` pieces as the
@@ -232,7 +245,8 @@ The threshold was chosen on half of 50 questions and checked on the other half
 ([ADR-028](docs/adr/ADR-028-relevance-threshold-before-generation.md)). The model was chosen over a
 0.5B one because it invented far fewer answers to unanswerable questions (1 vs 4 of 20)
 ([ADR-027](docs/adr/ADR-027-local-rag-with-llama-cpp.md)). The model file (~1.1 GB) lives in
-`models/generation`.
+`models/generation`, and since v12 only the model service loads it
+([ADR-031](docs/adr/ADR-031-separate-model-service.md)).
 
 ## 7. Data Flow
 
@@ -275,7 +289,8 @@ the model file and its metrics are produced at training time.
 | Search | PostgreSQL full-text search (`tsvector`, GIN, `ts_rank`) | Stemming and ranking in the database we already run; the baseline embeddings must beat — see [ADR-018](docs/adr/ADR-018-postgres-full-text-search-baseline.md) |
 | Embeddings | `fastembed` (ONNX Runtime) running `all-MiniLM-L6-v2` on the CPU; NumPy | Local and free; same vectors as sentence-transformers without PyTorch (import 21–25 s vs 90–150 s here) — see [ADR-023](docs/adr/ADR-023-local-embedding-model-with-onnx-runtime.md) |
 | Vector search | pgvector 0.8.6: `vector(384)` column, HNSW index (cosine), `pgvector` Python package | 10.5 s → 147 ms at 50,000 chunks; vectors, text and tenant filter in one query, no second datastore — see [ADR-025](docs/adr/ADR-025-pgvector-hnsw-index.md) (v8's exact baseline: [ADR-024](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md)) and [ADR-026](docs/adr/ADR-026-build-pgvector-into-the-alpine-image.md) |
-| Generation | `llama-cpp-python` (llama.cpp) running Qwen2.5-1.5B-Instruct, 4-bit GGUF, on the CPU | Local and free, one package and one file, no extra service; releases the GIL — see [ADR-027](docs/adr/ADR-027-local-rag-with-llama-cpp.md) |
+| Generation | `llama-cpp-python` (llama.cpp) running Qwen2.5-1.5B-Instruct, 4-bit GGUF, on the CPU | Local and free, one package and one file; releases the GIL — see [ADR-027](docs/adr/ADR-027-local-rag-with-llama-cpp.md) |
+| Model serving | A second FastAPI app (`app/model_service/`), one process, called by the API with `httpx`; a queue limit of 4 | One copy of the model for all API processes (API 2,380 → 981 MB); fast 503 instead of an unbounded wait — see [ADR-031](docs/adr/ADR-031-separate-model-service.md) and [ADR-032](docs/adr/ADR-032-bounded-model-queue.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
 
@@ -284,10 +299,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v11 — Answer streaming.** See
-[docs/versions/v11-answer-streaming.md](docs/versions/v11-answer-streaming.md) for the full
+**v12 — Model service.** See
+[docs/versions/v12-model-service.md](docs/versions/v12-model-service.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v11-answer-streaming/README.md](docs/versions/v11-answer-streaming/README.md) for
+[docs/versions/v12-model-service/README.md](docs/versions/v12-model-service/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -306,7 +321,8 @@ a short guide.
 | v9 | `v9-vector-search` | Semantic search reads every vector per question: 10.5 s P50 at 50,000 chunks, of which the maths is 36 ms | Complete |
 | v10 | `v10-rag` | Search returns passages, never answers, and never says "nothing relevant" | Complete |
 | v11 | `v11-answer-streaming` | ~6 s of blank screen before any answer. (The planned hybrid retrieval was measured first and made retrieval worse, hit@3 0.93 → 0.83, so it was not built) | Complete |
-| v12 | `v12-model-service` | One model object behind one lock inside each API process; reading the prompt on a CPU takes most of each answer (7.35 s to the first token) | Next (proposed) |
+| v12 | `v12-model-service` | The model lived inside every API process (2,380 MB each) and nothing limited the line: with 8 simultaneous users the slowest answer took 99 s | Complete |
+| v13 | `v13-caching` | Every repeated question costs a full 6–10 s answer — to be measured first: how often do questions repeat? | Next (proposed) |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -315,13 +331,15 @@ authentication did not. Old branches remain on GitHub as engineering history.
 The whole chain in one picture — the problem that forced each version, what changed, and what was
 measured afterwards:
 
-![Architecture evolution, v0 to v11](docs/architecture/evolution.svg)
+![Architecture evolution, v0 to v12](docs/architecture/evolution.svg)
 
 Carried forward, measured but not yet fixed: `total` still costs more than the page it
 accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
 rate-limit buckets live in one process, so every extra worker multiplies the limits; semantic
 retrieval misses the right article for 20% of answerable questions (paraphrases; hybrid
-retrieval did not help); answers take ~7 s, mostly reading the prompt, and run one at a time; wrong answers are not detected at runtime; embedding is slow on a CPU; nothing alerts anyone when
+retrieval did not help); answers take ~7 s, mostly reading the prompt, one at a time on one CPU
+(5–10 a minute; beyond 4 waiting, callers are told "busy"); the API's `/health` does not check
+the model service; wrong answers are not detected at runtime; embedding is slow on a CPU; nothing alerts anyone when
 the document worker stops.
 
 ## 11. How to Run
@@ -358,6 +376,14 @@ the free disk space first):
 
 ```bash
 python scripts/download_generation_model.py
+```
+
+and start the model service in a third terminal. Always **one** process: each would load its own
+copy of the model.
+
+```bash
+uvicorn app.model_service.main:app --port 8001
+curl http://127.0.0.1:8001/health      # {"status": "ok", "model_loaded": true, "in_queue": 0, "max_queue": 4}
 ```
 
 Interactive API docs: http://127.0.0.1:8000/docs
@@ -430,7 +456,7 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-226 tests, 522 seconds in the v11 session, with the real answer model; 218 tests, 443 seconds in the v10 session; 209 tests, 373 seconds in the v9 session (under memory pressure); 207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
+238 tests, 529 seconds in the v12 session, with the real answer model; 226 tests, 522 seconds in the v11 session; 218 tests, 443 seconds in the v10 session; 209 tests, 373 seconds in the v9 session (under memory pressure); 207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
 
 - **Document pipeline, no HTTP and no database** (29 tests) — chunks never exceed the maximum;
   offsets point at the exact text; **no character of the document is lost**; neighbours overlap;
@@ -453,6 +479,15 @@ pytest -v
   (checked with PostgreSQL's own scan counter; fails if the query sorts by another distance), and
   a small organisation sharing the index with a large one still gets its results (fails with
   `0 == 3` without the iterative scan).
+- **Model service** (8 tests, v12) — `/generate` and `/generate/stream` with a fake llama.cpp
+  model; a crash mid-stream ends with an `error` line; no model → 503 and `/health` "degraded"; a
+  full queue is refused **at once** with `Retry-After` and never reaches the model; every queue
+  place is given back after answers, streams and crashes; invalid requests are 422; and only
+  `app/model_service/model.py` may use llama.cpp.
+- **API ↔ model service** (4 tests, v12) — answers and streams through the real service with a
+  fake model; a service that is down → 503 on both endpoints; a busy service → 503 with
+  `Retry-After`; a service that fails mid-answer → the stream ends with `error`. The real-model
+  tests now go through the model service too (in memory, via FastAPI's `TestClient`).
 - **Streaming answers** (8 tests, v11) — the order `sources` → `text` → `done`, with the text
   adding up to the final answer; an unrelated question is a single `done` line; a refusal at the
   start is never streamed and stops generation; a late refusal is corrected by `done`; a missing
@@ -624,6 +659,8 @@ which is where hybrid retrieval should help.
 - [ADR-028 — Refuse before generating: a measured relevance threshold](docs/adr/ADR-028-relevance-threshold-before-generation.md)
 - [ADR-029 — Do not add hybrid retrieval, a reranker or a new embedding model yet](docs/adr/ADR-029-no-hybrid-retrieval-yet.md)
 - [ADR-030 — Stream answers as NDJSON: sources at once, then the text](docs/adr/ADR-030-stream-answers-as-ndjson.md)
+- [ADR-031 — Run the answer model in its own process, called over HTTP](docs/adr/ADR-031-separate-model-service.md)
+- [ADR-032 — Bound the model's queue and refuse early with 503 + Retry-After](docs/adr/ADR-032-bounded-model-queue.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -796,6 +833,18 @@ the prompt**: in-process, ~396 prompt tokens took 7.35 s to the first token and 
 with 4, 6 or 8 threads making no difference. One source instead of three answered faster (5.8 s vs
 7.2 s P50) but less correctly (0.67 vs 0.70), so three were kept.
 
+**v12 — concurrent users** (`scripts/load_test_answers.py`, 1/2/4/8 users, 3 different questions
+each, ~400 MB free RAM). Answers per minute: **4–11 in every setup**, before and after (one CPU, one
+model — the model service made nothing faster). With 8 users and the model inside the API, the
+slowest answer took **99.1 s** (P50 59.0 s). With the model service and a queue of 4, half the
+requests were refused as busy in ≤ 1.1 s, and the slowest answered one took 38.4 s and 52.2 s in two
+runs — but 93.4 s in a third, unexplained run. The model service's log showed generation varying
+3.4–18.7 s per answer and waits up to 47.9 s with 3 answers ahead: the limit bounds how many wait,
+not how long. `/health` stayed at 21–31 ms P50 throughout (llama.cpp releases the GIL). Memory
+(private): one v11 API process 2,380 MB; v12 API 981 MB + model service 1,802 MB; two v12 API
+workers 983 + 849 MB + 1,815 MB. One of those two workers died silently at the first four
+simultaneous questions; uvicorn restarted it.
+
 The model itself: 141 ms to embed one question, and 1–10 chunks per second to embed documents on
 this CPU. A 300-page PDF (1,246 chunks) took about **7.5 minutes** from upload to searchable,
 against 8.5–10.3 s in v7. That broke v7's 5-minute "worker died" timeout, which the tests (small
@@ -847,7 +896,7 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
    `BrokenRepository` double broke in **both** v3 and v4 for the same structural reason: N
    implementations means N manual edits with no compiler help. mypy or Pyright would have caught
    all of them.
-7. *The test suite takes 373–1,378 seconds* (226 tests and 522 s in v11; 218 and 443 s in v10; 209 in v9; 103 s in v4; 402 s in v7), and one timing-based rate-limit
+7. *The test suite takes 373–1,378 seconds* (238 tests and 529 s in v12; 226 and 522 s in v11; 218 and 443 s in v10; 209 in v9; 103 s in v4; 402 s in v7), and one timing-based rate-limit
    test fails when the machine is heavily loaded (4 bcrypt calls outlast the 15 s refill), which is
    approaching the point where it stops being run
    often enough to be useful. Both standard fixes cost something real: a lower bcrypt cost factor
@@ -875,8 +924,10 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
     One worker processes documents in series; a document abandoned by a crashed worker waits
     5 minutes (without a heartbeat) before it is retried.
 16. *Answers are slow, and limited by retrieval.* Each answer takes ~7 s on a CPU, mostly reading
-    the prompt, one at a time per process (trigger for a separate model service, v12, measured with
-    concurrent users first). For 20% of answerable questions the right article is not among the
+    the prompt, one at a time on the one CPU: 5–10 answers a minute. Since v12 the model runs in
+    one model service with a queue of 4, so a fifth waiting caller is told "busy" instead of waiting
+    up to 99 s; real capacity needs different hardware. The API's `/health` does not check the model
+    service. For 20% of answerable questions the right article is not among the
     sources; hybrid retrieval, a reranker and a second embedding model were measured and did not
     help (ADR-029). Wrong answers are not detected at runtime. The vector index is approximate, and its
     recall must be re-measured on real data. Embedding runs at 1–10 chunks/s.

@@ -12,9 +12,16 @@ from pathlib import Path
 
 import pytest
 
+import httpx
+from fastapi.testclient import TestClient
+
+from app.answers import generator
 from app.answers.generator import GenerationUnavailable
 from app.core.config import settings
+from app.model_service import main as model_service
+from app.model_service import model as model_service_model
 from tests.test_documents_api import PASSWORDS, REFUNDS, upload_and_process
+from tests.test_model_service import FakeLlama
 
 
 class FakeModel:
@@ -40,6 +47,19 @@ def fake_model(monkeypatch):
 
 def ask(client, question):
     return client.post("/answers", json={"question": question})
+
+
+@pytest.fixture
+def real_model_service(monkeypatch):
+    """The real model, behind the real model service, without a network.
+
+    FastAPI's TestClient is an httpx client that calls an app directly in
+    memory. Putting it where generator.py keeps its client makes the API talk
+    to the model service exactly as over HTTP - no second process needed.
+    """
+    if not model_service_model.is_loaded():
+        model_service_model.load(settings.generation_model_path)
+    monkeypatch.setattr(generator, "_client", TestClient(model_service.app))
 
 
 def test_an_answer_is_written_from_the_retrieved_chunks(tickets_client, fake_model):
@@ -154,7 +174,7 @@ def test_answers_have_their_own_rate_limit(tickets_client, fake_model):
     not Path(settings.generation_model_path).exists(),
     reason="generation model not downloaded (python scripts/download_generation_model.py)",
 )
-def test_the_real_model_answers_from_the_sources(tickets_client):
+def test_the_real_model_answers_from_the_sources(tickets_client, real_model_service):
     """The real model, end to end: the prompt format works with it and the reply
     is used. What it says is judged by scripts/evaluate_rag.py, not here -
     a test cannot tell a good answer from a plausible one."""
@@ -191,8 +211,6 @@ def streaming_model(monkeypatch):
         ["Refunds are issued ", "to the original payment method ", "within ten business days."]
     )
     monkeypatch.setattr("app.answers.service.generate_stream", model)
-    # The real check loads a 1.1 GB file; the fake model needs nothing loaded.
-    monkeypatch.setattr("app.answers.generator.load_model", lambda: None)
     return model
 
 
@@ -261,10 +279,12 @@ def test_a_late_refusal_is_corrected_by_the_done_line(tickets_client, streaming_
 def test_a_missing_model_is_a_503_before_the_stream_starts(tickets_client, monkeypatch):
     upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
 
-    def model_missing():
-        raise GenerationUnavailable("file not downloaded")
+    def model_missing(messages, max_tokens):
+        # A normal function, not a generator: like the real generate_stream(),
+        # it fails when called, before the API has sent anything.
+        raise GenerationUnavailable("model service not running")
 
-    monkeypatch.setattr("app.answers.generator.load_model", model_missing)
+    monkeypatch.setattr("app.answers.service.generate_stream", model_missing)
 
     response = tickets_client.post("/answers/stream", json={"question": "How long does a refund take?"})
 
@@ -275,7 +295,6 @@ def test_a_missing_model_is_a_503_before_the_stream_starts(tickets_client, monke
 
 def test_a_crash_during_the_stream_ends_with_an_error_line(tickets_client, monkeypatch):
     upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
-    monkeypatch.setattr("app.answers.generator.load_model", lambda: None)
 
     def crashes(messages, max_tokens):
         yield "Refunds are issued to the original payment method, "
@@ -299,7 +318,7 @@ def test_streaming_shares_the_answer_rate_limit(tickets_client, streaming_model)
     not Path(settings.generation_model_path).exists(),
     reason="generation model not downloaded (python scripts/download_generation_model.py)",
 )
-def test_the_real_model_streams_the_same_answer(tickets_client):
+def test_the_real_model_streams_the_same_answer(tickets_client, real_model_service):
     """temperature=0: streamed or not, the model writes the same words."""
     upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
     question = "How long does a refund take?"
@@ -309,3 +328,89 @@ def test_the_real_model_streams_the_same_answer(tickets_client):
 
     assert events[-1]["type"] == "done"
     assert events[-1]["answer"] == whole["answer"]
+
+
+# --- The model service (v12) ----------------------------------------------------------
+#
+# The tests above replace generate() / generate_stream() themselves. These keep
+# the real ones in app/answers/generator.py and change only what is on the other
+# end of its HTTP client: the model service with a fake model, a service that
+# is down, and a service that is busy.
+
+
+@pytest.fixture
+def fake_model_service(monkeypatch):
+    llama = FakeLlama(pieces=["Refunds are issued to the original payment method ", "within ten business days."])
+    monkeypatch.setattr(model_service_model, "_model", llama)
+    monkeypatch.setattr(generator, "_client", TestClient(model_service.app))
+    return llama
+
+
+def model_service_that_answers(monkeypatch, handler):
+    """Replace the model service with a function: request in, response out."""
+    # httpx.MockTransport: an httpx client that never opens a connection and
+    # hands every request to `handler` instead.
+    client = httpx.Client(base_url="http://model-service", transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(generator, "_client", client)
+
+
+def test_answers_are_written_by_the_model_service(tickets_client, fake_model_service):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    whole = ask(tickets_client, "How long does a refund take?").json()
+    events = stream(tickets_client, "How long does a refund take?")
+
+    expected = "Refunds are issued to the original payment method within ten business days."
+    assert whole["answer"] == expected
+    assert events[-1]["answer"] == expected
+    # The service received the chat the API built: the sources and the question.
+    assert "Question: How long does a refund take?" in fake_model_service.calls[0][-1]["content"]
+
+
+def test_a_model_service_that_is_down_is_a_503(tickets_client, monkeypatch):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    def not_running(request):
+        raise httpx.ConnectError("connection refused")
+
+    model_service_that_answers(monkeypatch, not_running)
+
+    whole = ask(tickets_client, "How long does a refund take?")
+    streamed = tickets_client.post("/answers/stream", json={"question": "How long does a refund take?"})
+
+    for response in (whole, streamed):
+        assert response.status_code == 503
+        assert "mode=semantic" in response.json()["detail"]
+
+
+def test_a_busy_model_service_is_a_503_with_retry_after(tickets_client, monkeypatch):
+    """Busy is not broken: the client is told when to try again."""
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    def busy(request):
+        return httpx.Response(503, headers={"Retry-After": "10"}, json={"detail": "The model is busy"})
+
+    model_service_that_answers(monkeypatch, busy)
+
+    whole = ask(tickets_client, "How long does a refund take?")
+    streamed = tickets_client.post("/answers/stream", json={"question": "How long does a refund take?"})
+
+    for response in (whole, streamed):
+        assert response.status_code == 503
+        assert response.headers["Retry-After"] == "10"
+        assert "busy" in response.json()["detail"]
+
+
+def test_a_model_service_that_stops_mid_answer_ends_the_stream_with_an_error(tickets_client, monkeypatch):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    def stops(request):
+        body = json.dumps({"text": "Refunds are issued to the original payment method, "}) + "\n"
+        body += json.dumps({"error": "Generation failed"}) + "\n"
+        return httpx.Response(200, content=body.encode())
+
+    model_service_that_answers(monkeypatch, stops)
+
+    events = stream(tickets_client, "How long does a refund take?")
+
+    assert events[-1]["type"] == "error"

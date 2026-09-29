@@ -110,21 +110,26 @@ class AnswerService:
             return Answer(NOT_FOUND, answered=False, reason="model_declined", sources=sources)
         return Answer(reply, answered=True, reason="answered", sources=sources)
 
-    def stream(self, question: str, sources: list[SearchHit]) -> Iterator[dict]:
-        """The answer in pieces, as events (POST /answers/stream, v11).
+    def open_stream(self, question: str, sources: list[SearchHit]) -> Iterator[dict]:
+        """Start a streamed answer (POST /answers/stream, v11) and return its events.
 
-        Call retrieve() first: its errors must happen before streaming starts.
-        Yields, in order:
+        Call retrieve() first. Like retrieve(), this raises BEFORE streaming
+        starts: generate_stream() connects to the model service now, so "down"
+        (GenerationUnavailable) and "busy" (GenerationBusy) are raised here.
+        The returned events are, in order:
             {"type": "text", "text": "..."}      zero or more times
             {"type": "done", "answered": ..., "reason": ..., "answer": "..."}
         """
         if not sources:
-            yield done_event(NOT_FOUND, answered=False, reason="no_relevant_sources")
-            return
+            return iter([done_event(NOT_FOUND, answered=False, reason="no_relevant_sources")])
+        pieces = generate_stream(build_messages(question, sources), self._max_tokens)
+        return self._events(pieces)
 
+    def _events(self, pieces: Iterator[str]) -> Iterator[dict]:
+        """Turn the model's pieces into events, holding back a possible refusal."""
         reply = ""
         sent = False  # has any text reached the client yet?
-        for piece in generate_stream(build_messages(question, sources), self._max_tokens):
+        for piece in pieces:
             reply += piece
             if not sent:
                 # Hold the start back until it can be checked for a refusal.
