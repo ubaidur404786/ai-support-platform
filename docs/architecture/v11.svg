@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="960" viewBox="0 0 1040 960" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="960" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v11 — Answer streaming (and a measured "no" to hybrid retrieval)</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: every answer was ~6–7 s of blank screen, then all at once — although its sources were known after 0.12 s.</text>
+  <text x="30" y="74" fill="#1565c0">FIX: POST /answers/stream sends NDJSON lines: sources at once, text as the model writes it, a final "done" line that has the last word.</text>
+
+  <!-- Main flow -->
+  <rect x="20" y="92" width="600" height="520" rx="8" fill="none" stroke="#1565c0" stroke-dasharray="5,4"/>
+  <text x="34" y="112" font-size="12" font-weight="bold" fill="#1565c0" letter-spacing="1">API PROCESS — POST /answers/stream (new endpoint, app/answers/)</text>
+
+  <rect x="40" y="124" width="560" height="74" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="143" font-weight="bold" fill="#222" font-size="12">router.py — BEFORE the first line is sent</text>
+  <text x="52" y="161" fill="#333" font-size="11">token · limit_answers (shared with /answers) · service.retrieve() → 422 / 503</text>
+  <text x="52" y="177" fill="#333" font-size="11">generator.load_model() → 503 if the model file is missing</text>
+  <text x="52" y="192" fill="#666" font-size="10">after the first line the status is already 200: failures can only be reported inside the stream</text>
+  <line x1="320" y1="198" x2="320" y2="218" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="220" width="560" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="239" font-weight="bold" fill="#222" font-size="11">line 1 → {"type": "sources", "sources": [{"number": 1, "document_title": "Cancelling …"}]}</text>
+  <text x="52" y="256" fill="#1565c0" font-size="11">sent at ~0.15 s (P50) — the reader sees where the answer will come from</text>
+  <line x1="320" y1="264" x2="320" y2="284" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="286" width="560" height="60" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="305" font-weight="bold" fill="#222" font-size="12">generator.py — generate_stream(): llama.cpp stream=True</text>
+  <text x="52" y="323" fill="#333" font-size="11">yields one piece per token · the lock is held for the whole answer</text>
+  <text x="52" y="339" fill="#666" font-size="10">client disconnects → generator closed → lock released</text>
+  <line x1="320" y1="346" x2="320" y2="366" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="368" width="560" height="76" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="387" font-weight="bold" fill="#222" font-size="12">service.py — stream(): hold back the first 40 characters</text>
+  <text x="52" y="405" fill="#333" font-size="11">"I don't know…" → STOP generating, send only done (answered: false)</text>
+  <text x="52" y="421" fill="#333" font-size="11">otherwise → send them, then every next piece at once</text>
+  <text x="52" y="437" fill="#666" font-size="10">a refusal never flashes on screen as if it were an answer</text>
+  <line x1="320" y1="444" x2="320" y2="464" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="466" width="560" height="44" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="485" font-weight="bold" fill="#222" font-size="11">lines 2… → {"type": "text", "text": "Workspace owners can cancel "} …</text>
+  <text x="52" y="502" fill="#333" font-size="11">first text at 5.50 s P50 (whole answer on /answers: 6.15 s)</text>
+  <line x1="320" y1="510" x2="320" y2="530" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="532" width="560" height="60" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="52" y="551" font-weight="bold" fill="#222" font-size="11">last line → {"type": "done", "answered": true, "reason": "answered", "answer": "…"}</text>
+  <text x="52" y="568" fill="#333" font-size="11">always last; a late refusal is corrected here (answered: false)</text>
+  <text x="52" y="584" fill="#666" font-size="10">a crash mid-answer ends with {"type": "error"} instead</text>
+
+  <!-- Right: where the time goes -->
+  <rect x="640" y="92" width="380" height="250" rx="8" fill="none" stroke="#999" stroke-dasharray="5,4"/>
+  <text x="654" y="112" font-size="12" font-weight="bold" fill="#555" letter-spacing="1">WHERE THE 7 SECONDS GO</text>
+  <rect x="656" y="124" width="348" height="118" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="668" y="143" font-weight="bold" fill="#c62828" font-size="12">Reading the prompt ("prefill"), not writing</text>
+  <text x="668" y="162" fill="#333" font-size="11">~396-token prompt: first token 7.35 s</text>
+  <text x="668" y="179" fill="#333" font-size="11">~173-token prompt: first token 2.81 s</text>
+  <text x="668" y="196" fill="#333" font-size="11">writing the reply: ~2 s either way</text>
+  <text x="668" y="214" fill="#333" font-size="11">4 / 6 / 8 threads: 7.26 / 7.35 / 7.20 s</text>
+  <text x="668" y="232" fill="#666" font-size="10">in-process, 8 questions, cache reset, i5-13420H CPU</text>
+  <rect x="656" y="252" width="348" height="78" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="668" y="271" font-weight="bold" fill="#1565c0" font-size="12">Fewer sources = faster, but worse</text>
+  <text x="668" y="289" fill="#333" font-size="11">1 source: 5.8 s, correct 0.67, sources right 0.73</text>
+  <text x="668" y="306" fill="#333" font-size="11">3 sources: 7.2 s, correct 0.70, sources right 0.80</text>
+  <text x="668" y="322" fill="#1565c0" font-size="11">→ kept at 3 (ANSWER_MAX_SOURCES)</text>
+
+  <!-- Right: hybrid rejected -->
+  <rect x="640" y="358" width="380" height="254" rx="8" fill="none" stroke="#999" stroke-dasharray="5,4"/>
+  <text x="654" y="378" font-size="12" font-weight="bold" fill="#555" letter-spacing="1">PLANNED, MEASURED, NOT BUILT</text>
+  <rect x="656" y="390" width="348" height="210" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="668" y="409" font-weight="bold" fill="#c62828" font-size="12">Hybrid retrieval (keyword + semantic, RRF)</text>
+  <text x="668" y="428" fill="#333" font-size="11">30 questions, hit@3 of the right article:</text>
+  <text x="668" y="446" fill="#333" font-size="11">semantic (kept)            0.93</text>
+  <text x="668" y="463" fill="#333" font-size="11">hybrid, any word           0.83</text>
+  <text x="668" y="480" fill="#333" font-size="11">hybrid, all words          0.93 (a tie)</text>
+  <text x="668" y="497" fill="#333" font-size="11">semantic + reranker        0.83</text>
+  <text x="668" y="514" fill="#333" font-size="11">bge-small embeddings       0.93, refuses worse</text>
+  <text x="668" y="536" fill="#333" font-size="11">The 6 misses are paraphrases with no shared</text>
+  <text x="668" y="552" fill="#333" font-size="11">words: keywords cannot help them.</text>
+  <text x="668" y="572" fill="#1565c0" font-size="11">→ ADR-029: kept semantic; script kept to re-run</text>
+  <text x="668" y="590" fill="#666" font-size="10">untested: exact identifiers (none in the eval set)</text>
+
+  <!-- Measurements -->
+  <text x="20" y="642" font-size="12" font-weight="bold" fill="#555" letter-spacing="1">MEASUREMENTS (local CPU laptop, 1.5B model, through the API, 25 answered questions, separate passes)</text>
+
+  <rect x="20" y="654" width="320" height="104" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="32" y="673" font-weight="bold" fill="#222" font-size="12">Time until the user sees…</text>
+  <text x="32" y="693" fill="#333" font-size="11">sources: 6.15 s → 0.15 s (P50)</text>
+  <text x="32" y="711" fill="#333" font-size="11">first text: 6.15 s → 5.50 s (P50)</text>
+  <text x="32" y="729" fill="#333" font-size="11">whole answer: 6.15 s → 7.22 s (P50)</text>
+  <text x="32" y="747" fill="#666" font-size="10">before = POST /answers, after = /answers/stream</text>
+
+  <rect x="352" y="654" width="330" height="104" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="364" y="673" font-weight="bold" fill="#222" font-size="12">Same answer?</text>
+  <text x="364" y="693" fill="#333" font-size="11">25 of 25 identical (temperature 0)</text>
+  <text x="364" y="711" fill="#333" font-size="11">refusal: stops after a few tokens</text>
+  <text x="364" y="729" fill="#333" font-size="11">17 answer tests (8 new for streaming)</text>
+  <text x="364" y="747" fill="#666" font-size="10">first measurement repeated the question: 0.86 s (cache!)</text>
+
+  <rect x="694" y="654" width="326" height="104" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="706" y="673" font-weight="bold" fill="#222" font-size="12">Unchanged from v10</text>
+  <text x="706" y="693" fill="#333" font-size="11">answerable correct 0.70</text>
+  <text x="706" y="711" fill="#333" font-size="11">unanswerable refused 0.95</text>
+  <text x="706" y="729" fill="#333" font-size="11">one answer at a time per process</text>
+  <text x="706" y="747" fill="#666" font-size="10">50 questions, evaluate_rag.py, same session</text>
+
+  <!-- Next limitation -->
+  <rect x="20" y="778" width="1000" height="160" rx="6" fill="#fff8e1" stroke="#f9a825" stroke-width="1.5"/>
+  <text x="32" y="800" font-weight="bold" fill="#8d6e00" font-size="13">NEXT LIMITATION</text>
+  <text x="32" y="822" fill="#333" font-size="12">• Reading the prompt on a CPU dominates (7.35 s to the first token for ~400 tokens), and the model is one object behind one lock inside the API</text>
+  <text x="44" y="840" fill="#333" font-size="12">process: a second question waits (12.4 s in v10), and every extra API process would load another 1.1 GB copy of the model.</text>
+  <text x="44" y="858" fill="#333" font-size="12">→ proposed next: v12-model-service — generation in its own process, measured first with a small concurrent-users load test.</text>
+  <text x="32" y="880" fill="#333" font-size="12">• Paraphrase misses remain (sources right for 80% of answerable questions); no tested retrieval change helped. A bigger, harder evaluation set</text>
+  <text x="44" y="898" fill="#333" font-size="12">is needed before retrieval can be improved by measurement.</text>
+  <text x="32" y="920" fill="#333" font-size="12">• Wrong answers are still not detected at runtime.</text>
+</svg>

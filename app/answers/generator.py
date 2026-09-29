@@ -8,6 +8,7 @@ llama.cpp is a C++ inference engine built to run such models on an ordinary CPU.
 
 import logging
 import threading
+from collections.abc import Iterator
 from functools import lru_cache
 
 from app.core.config import settings
@@ -58,3 +59,42 @@ def generate(messages: list[dict], max_tokens: int, model_path: str = settings.g
         # A missing file, a corrupt download, out of memory.
         raise GenerationUnavailable("The answer model is unavailable") from error
     return output["choices"][0]["message"]["content"].strip()
+
+
+def load_model(model_path: str = settings.generation_model_path) -> None:
+    """Load the model now, or raise GenerationUnavailable.
+
+    Used before a streamed answer starts: once the first line of a stream has
+    been sent, the status code (200) cannot be changed any more, so "the model
+    is missing" must be discovered before that - and become a normal 503.
+    """
+    try:
+        _load_model(model_path)
+    except Exception as error:
+        raise GenerationUnavailable("The answer model is unavailable") from error
+
+
+def generate_stream(
+    messages: list[dict], max_tokens: int, model_path: str = settings.generation_model_path
+) -> Iterator[str]:
+    """Like generate(), but yield the reply in small pieces as the model writes them.
+
+    The model produces an answer one token (a word or part of a word) at a time.
+    generate() waits for the last one; this hands each piece over at once, so a
+    person starts reading after the first piece instead of after the whole answer.
+
+    The lock is held for the whole answer, including while the caller is still
+    sending pieces to the client. If the client disconnects, Python closes this
+    generator, and the "with" block releases the lock.
+    """
+    model = _load_model(model_path)
+    with _generation_lock:
+        chunks = model.create_chat_completion(
+            messages=messages, max_tokens=max_tokens, temperature=0, stream=True
+        )
+        for chunk in chunks:
+            # Each chunk holds the newly written text under "delta"; the first
+            # and last ones carry no text, only bookkeeping.
+            piece = chunk["choices"][0]["delta"].get("content")
+            if piece:
+                yield piece

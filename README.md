@@ -4,7 +4,7 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v10 — RAG: answers written from the knowledge base** (branch `v10-rag`)
+**Current version: v11 — Answer streaming** (branch `v11-answer-streaming`)
 
 ## 1. Project Overview
 
@@ -16,7 +16,7 @@ The engineering goal is a production-style AI system whose every component can b
 what problem forced it in, what it costs, and what happens when it fails. The architecture
 history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
 `v3-pagination`, `v4-authentication`, `v5-rate-limiting`, `v6-document-ingestion`,
-`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, `v10-rag`, ...)
+`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, `v10-rag`, `v11-answer-streaming`, ...)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -48,7 +48,7 @@ a human steps in where the model is unsure rather than everywhere.
 
 ## 4. Current Architecture
 
-![v10 architecture](docs/architecture/v10.svg)
+![v11 architecture](docs/architecture/v11.svg)
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
@@ -62,7 +62,8 @@ from a small local model run by ONNX Runtime), and search can compare meaning in
 (`mode=semantic`). Since v9 those vectors live in a **pgvector** column, and PostgreSQL finds the
 nearest ones itself through an HNSW index. Since v10, `POST /answers` turns the closest chunks into
 a short answer with a small local language model (llama.cpp, CPU), and refuses when nothing
-relevant was found. No cache, broker or external service yet.
+relevant was found. Since v11 the same answer can be streamed as it is written
+(`POST /answers/stream`). No cache, broker or external service yet.
 
 ```
 app/
@@ -88,6 +89,12 @@ otherwise the model answers from those chunks only (~7 s on this CPU, one answer
 process) → a reply of "I don't know" also becomes `answered: false`. The response always lists the
 chunks the model saw as numbered `sources`. The model cannot be loaded → **503** "try GET
 /documents/search?mode=semantic".
+
+`POST /answers/stream` (v11): the same checks run **before** the first byte (422 / 429 / 503 keep
+their status codes), then one NDJSON line per event: `sources` (~0.15 s), `text` pieces as the
+model writes them (first at ~5.5 s), and a final `done` that says whether it counts as an answer.
+The first 40 characters are held back: a reply starting "I don't know" is never shown as text, and
+generation stops there. A crash mid-answer ends the stream with an `error` line.
 
 `POST /tickets`:
 
@@ -277,10 +284,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v10 — RAG: answers written from the knowledge base.** See
-[docs/versions/v10-rag.md](docs/versions/v10-rag.md) for the full
+**v11 — Answer streaming.** See
+[docs/versions/v11-answer-streaming.md](docs/versions/v11-answer-streaming.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v10-rag/README.md](docs/versions/v10-rag/README.md) for
+[docs/versions/v11-answer-streaming/README.md](docs/versions/v11-answer-streaming/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -298,7 +305,8 @@ a short guide.
 | v8 | `v8-embeddings` | Keyword search misses paraphrased questions (hit@3 0.47, 20% empty) | Complete |
 | v9 | `v9-vector-search` | Semantic search reads every vector per question: 10.5 s P50 at 50,000 chunks, of which the maths is 36 ms | Complete |
 | v10 | `v10-rag` | Search returns passages, never answers, and never says "nothing relevant" | Complete |
-| v11 | `v11-hybrid-retrieval` | For 20% of answerable questions the right article is not among the answer's sources; keyword search is 1.00 on lexical questions | Next (proposed) |
+| v11 | `v11-answer-streaming` | ~6 s of blank screen before any answer. (The planned hybrid retrieval was measured first and made retrieval worse, hit@3 0.93 → 0.83, so it was not built) | Complete |
+| v12 | `v12-model-service` | One model object behind one lock inside each API process; reading the prompt on a CPU takes most of each answer (7.35 s to the first token) | Next (proposed) |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -307,13 +315,13 @@ authentication did not. Old branches remain on GitHub as engineering history.
 The whole chain in one picture — the problem that forced each version, what changed, and what was
 measured afterwards:
 
-![Architecture evolution, v0 to v10](docs/architecture/evolution.svg)
+![Architecture evolution, v0 to v11](docs/architecture/evolution.svg)
 
 Carried forward, measured but not yet fixed: `total` still costs more than the page it
 accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
 rate-limit buckets live in one process, so every extra worker multiplies the limits; semantic
-retrieval misses the right article for 20% of answerable questions; answers take ~7 s and run one
-at a time; wrong answers are not detected at runtime; embedding is slow on a CPU; nothing alerts anyone when
+retrieval misses the right article for 20% of answerable questions (paraphrases; hybrid
+retrieval did not help); answers take ~7 s, mostly reading the prompt, and run one at a time; wrong answers are not detected at runtime; embedding is slow on a CPU; nothing alerts anyone when
 the document worker stops.
 
 ## 11. How to Run
@@ -422,7 +430,7 @@ docker compose exec -T db psql -U support -d support_platform -c "CREATE DATABAS
 pytest -v
 ```
 
-218 tests, 443 seconds in the v10 session, with the real answer model; 209 tests, 373 seconds in the v9 session (under memory pressure); 207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
+226 tests, 522 seconds in the v11 session, with the real answer model; 218 tests, 443 seconds in the v10 session; 209 tests, 373 seconds in the v9 session (under memory pressure); 207 tests, 1,378 seconds in the v8 session (on a heavily loaded laptop — not comparable to earlier sessions) — most of it bcrypt and, since v8, the embedding model (see §15):
 
 - **Document pipeline, no HTTP and no database** (29 tests) — chunks never exceed the maximum;
   offsets point at the exact text; **no character of the document is lost**; neighbours overlap;
@@ -445,6 +453,11 @@ pytest -v
   (checked with PostgreSQL's own scan counter; fails if the query sorts by another distance), and
   a small organisation sharing the index with a large one still gets its results (fails with
   `0 == 3` without the iterative scan).
+- **Streaming answers** (8 tests, v11) — the order `sources` → `text` → `done`, with the text
+  adding up to the final answer; an unrelated question is a single `done` line; a refusal at the
+  start is never streamed and stops generation; a late refusal is corrected by `done`; a missing
+  model is a normal 503 before the stream; a crash mid-stream ends with an `error` line; the answer
+  budget is shared; and, with the real model, the streamed answer equals the non-streamed one.
 - **Answers** (9 tests, v10) — mostly with a fake model that records what it is sent: the retrieved
   chunks reach the prompt; chunks below the threshold do not; an unrelated question is "not found"
   **without calling the model**; "I don't know" becomes "not found" with sources kept; another
@@ -564,6 +577,21 @@ Full results, every answer included: `evaluation/results/v10-rag.json`. "Correct
 so it can miss a right answer worded differently. Wrong answers still occur: "No." to "Can I close
 our company account for good?".
 
+### Retrieval (v11): hybrid retrieval, measured and not adopted
+
+`scripts/compare_hybrid_retrieval.py`, the same 30 questions:
+
+| Method | hit@1 | hit@3 | MRR |
+|---|---|---|---|
+| **semantic (in use)** | **0.80** | **0.93** | **0.87** |
+| hybrid (RRF), keyword matching any word | 0.73 | 0.83 | 0.82 |
+| hybrid (RRF), keyword matching all words | 0.80 | 0.93 | 0.87 |
+
+Common words pulled the wrong articles up for paraphrased questions. A cross-encoder reranker
+(hit@3 0.83) and `bge-small` embeddings (worse at refusing) were not adopted either
+([ADR-029](docs/adr/ADR-029-no-hybrid-retrieval-yet.md)). The set contains no exact identifiers,
+which is where hybrid retrieval should help.
+
 ## 14. Architecture Decisions
 
 - [ADR-001 — Classical ML model as the baseline classifier](docs/adr/ADR-001-classical-ml-baseline-classifier.md)
@@ -594,6 +622,8 @@ our company account for good?".
 - [ADR-026 — Build pgvector into our own PostgreSQL Alpine image](docs/adr/ADR-026-build-pgvector-into-the-alpine-image.md)
 - [ADR-027 — Generate answers locally with a small model run by llama.cpp](docs/adr/ADR-027-local-rag-with-llama-cpp.md)
 - [ADR-028 — Refuse before generating: a measured relevance threshold](docs/adr/ADR-028-relevance-threshold-before-generation.md)
+- [ADR-029 — Do not add hybrid retrieval, a reranker or a new embedding model yet](docs/adr/ADR-029-no-hybrid-retrieval-yet.md)
+- [ADR-030 — Stream answers as NDJSON: sources at once, then the text](docs/adr/ADR-030-stream-answers-as-ndjson.md)
 
 ## 15. Performance / Scaling Notes
 
@@ -759,6 +789,13 @@ runs, **0.12 s** when the threshold refuses. Two different questions sent togeth
 endpoints are not slowed: `/health` was 21 ms P50 during generation (19 ms idle), because llama.cpp
 releases the GIL. Memory: ~1.1 GB more in the API process.
 
+**v11 — streaming**, 25 answered questions, whole and streamed in separate passes: sources line
+**0.15 s**, first text **5.50 s**, done 7.22 s (P50), against 6.15 s for the whole answer; the same
+text 25 of 25 times. The first text is late because the model spends most of an answer **reading
+the prompt**: in-process, ~396 prompt tokens took 7.35 s to the first token and ~173 took 2.81 s,
+with 4, 6 or 8 threads making no difference. One source instead of three answered faster (5.8 s vs
+7.2 s P50) but less correctly (0.67 vs 0.70), so three were kept.
+
 The model itself: 141 ms to embed one question, and 1–10 chunks per second to embed documents on
 this CPU. A 300-page PDF (1,246 chunks) took about **7.5 minutes** from upload to searchable,
 against 8.5–10.3 s in v7. That broke v7's 5-minute "worker died" timeout, which the tests (small
@@ -810,7 +847,7 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
    `BrokenRepository` double broke in **both** v3 and v4 for the same structural reason: N
    implementations means N manual edits with no compiler help. mypy or Pyright would have caught
    all of them.
-7. *The test suite takes 373–1,378 seconds* (218 tests and 443 s in v10; 209 in v9; 103 s in v4; 402 s in v7), and one timing-based rate-limit
+7. *The test suite takes 373–1,378 seconds* (226 tests and 522 s in v11; 218 and 443 s in v10; 209 in v9; 103 s in v4; 402 s in v7), and one timing-based rate-limit
    test fails when the machine is heavily loaded (4 bcrypt calls outlast the 15 s refill), which is
    approaching the point where it stops being run
    often enough to be useful. Both standard fixes cost something real: a lower bcrypt cost factor
@@ -837,10 +874,11 @@ on the same machine; cross-day comparisons are reported as invalid rather than a
     anyone. Queue depth and the age of the oldest queued document are the first metrics needed.
     One worker processes documents in series; a document abandoned by a crashed worker waits
     5 minutes (without a heartbeat) before it is retried.
-16. *Answers are limited by retrieval, and slow.* For 20% of answerable questions the right
-    article is not among the sources (trigger for hybrid retrieval, v11). Each answer takes ~7 s on
-    a CPU, one at a time per process (trigger for separate model serving, once concurrent use is
-    measured). Wrong answers are not detected at runtime. The vector index is approximate, and its
+16. *Answers are slow, and limited by retrieval.* Each answer takes ~7 s on a CPU, mostly reading
+    the prompt, one at a time per process (trigger for a separate model service, v12, measured with
+    concurrent users first). For 20% of answerable questions the right article is not among the
+    sources; hybrid retrieval, a reranker and a second embedding model were measured and did not
+    help (ADR-029). Wrong answers are not detected at runtime. The vector index is approximate, and its
     recall must be re-measured on real data. Embedding runs at 1–10 chunks/s.
 17. *Search cost grows with the number of matching chunks*, not with `limit` — v3's problem, inside
     the database. Bounded (108 ms at 39,588 chunks, worst case), not flat.

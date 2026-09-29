@@ -7,6 +7,7 @@ called at all, and how its reply is turned into a response. The real model is
 exercised by one test at the end and by scripts/evaluate_rag.py.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -164,3 +165,147 @@ def test_the_real_model_answers_from_the_sources(tickets_client):
     assert body["reason"] in ("answered", "model_declined")
     assert body["answer"]
     assert body["sources"][0]["document_title"] == "Refund policy"
+
+
+# --- Streaming (v11) ------------------------------------------------------------------
+
+
+class FakeStreamingModel:
+    """Yields its reply in fixed pieces, and remembers how many it handed out."""
+
+    def __init__(self, pieces):
+        self.pieces = pieces
+        self.calls = 0
+        self.pieces_sent = 0
+
+    def __call__(self, messages, max_tokens):
+        self.calls += 1
+        for piece in self.pieces:
+            self.pieces_sent += 1
+            yield piece
+
+
+@pytest.fixture
+def streaming_model(monkeypatch):
+    model = FakeStreamingModel(
+        ["Refunds are issued ", "to the original payment method ", "within ten business days."]
+    )
+    monkeypatch.setattr("app.answers.service.generate_stream", model)
+    # The real check loads a 1.1 GB file; the fake model needs nothing loaded.
+    monkeypatch.setattr("app.answers.generator.load_model", lambda: None)
+    return model
+
+
+def stream(client, question):
+    """POST /answers/stream and return its lines as a list of dicts."""
+    response = client.post("/answers/stream", json={"question": question})
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    return [json.loads(line) for line in response.text.splitlines()]
+
+
+def test_a_stream_sends_sources_first_then_text_then_done(tickets_client, streaming_model):
+    refunds = upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    events = stream(tickets_client, "How long does a refund take?")
+
+    assert [e["type"] for e in events[:2]] == ["sources", "text"]
+    assert events[0]["sources"][0]["document_id"] == refunds["id"]
+    assert events[-1]["type"] == "done"
+    assert events[-1]["answered"] is True
+    # The pieces add up to the final answer - nothing lost, nothing extra.
+    text = "".join(e["text"] for e in events if e["type"] == "text")
+    assert text == events[-1]["answer"] == "".join(streaming_model.pieces)
+
+
+def test_a_stream_for_an_unrelated_question_is_one_done_line(tickets_client, streaming_model):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    events = stream(tickets_client, "What is the capital of France?")
+
+    assert events == [
+        {
+            "type": "done",
+            "answered": False,
+            "reason": "no_relevant_sources",
+            "answer": "I could not find an answer to that in the knowledge base.",
+        }
+    ]
+    assert streaming_model.calls == 0
+
+
+def test_a_refusal_is_never_streamed_as_text_and_generation_stops(tickets_client, streaming_model):
+    """The start of the reply is held back until it can be checked. "I don't
+    know" must not flash on the user's screen as if it were an answer - and
+    the model is not asked for the rest of it."""
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+    streaming_model.pieces = ["I don't ", "know. The context ", "is about refunds, ", "not this."] + ["x"] * 50
+
+    events = stream(tickets_client, "How long does a refund take?")
+
+    assert [e["type"] for e in events] == ["sources", "done"]
+    assert events[-1]["reason"] == "model_declined"
+    assert streaming_model.pieces_sent < 10
+
+
+def test_a_late_refusal_is_corrected_by_the_done_line(tickets_client, streaming_model):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+    streaming_model.pieces = ["Based on the refund policy above, ", "the context does not mention that."]
+
+    events = stream(tickets_client, "How long does a refund take?")
+
+    assert events[-1]["answered"] is False
+    assert events[-1]["reason"] == "model_declined"
+
+
+def test_a_missing_model_is_a_503_before_the_stream_starts(tickets_client, monkeypatch):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+
+    def model_missing():
+        raise GenerationUnavailable("file not downloaded")
+
+    monkeypatch.setattr("app.answers.generator.load_model", model_missing)
+
+    response = tickets_client.post("/answers/stream", json={"question": "How long does a refund take?"})
+
+    # A normal JSON error with a real status code, not a broken stream.
+    assert response.status_code == 503
+    assert "mode=semantic" in response.json()["detail"]
+
+
+def test_a_crash_during_the_stream_ends_with_an_error_line(tickets_client, monkeypatch):
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+    monkeypatch.setattr("app.answers.generator.load_model", lambda: None)
+
+    def crashes(messages, max_tokens):
+        yield "Refunds are issued to the original payment method, "
+        raise RuntimeError("out of memory")
+
+    monkeypatch.setattr("app.answers.service.generate_stream", crashes)
+
+    events = stream(tickets_client, "How long does a refund take?")
+
+    assert events[-1]["type"] == "error"
+
+
+def test_streaming_shares_the_answer_rate_limit(tickets_client, streaming_model):
+    for _ in range(settings.answer_rate_limit_per_minute):
+        assert tickets_client.post("/answers/stream", json={"question": "capital of France?"}).status_code == 200
+
+    assert ask(tickets_client, "capital of France?").status_code == 429
+
+
+@pytest.mark.skipif(
+    not Path(settings.generation_model_path).exists(),
+    reason="generation model not downloaded (python scripts/download_generation_model.py)",
+)
+def test_the_real_model_streams_the_same_answer(tickets_client):
+    """temperature=0: streamed or not, the model writes the same words."""
+    upload_and_process(tickets_client, "refunds.md", REFUNDS.encode())
+    question = "How long does a refund take?"
+
+    whole = ask(tickets_client, question).json()
+    events = stream(tickets_client, question)
+
+    assert events[-1]["type"] == "done"
+    assert events[-1]["answer"] == whole["answer"]

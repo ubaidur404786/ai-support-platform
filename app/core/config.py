@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.10.0"
+    app_version: str = "0.11.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -119,8 +119,11 @@ class Settings(BaseSettings):
     # 0.30 kept 93% of answerable questions and refused 90% of unanswerable ones
     # on the held-out half. A different embedding model needs a new measurement.
     answer_relevance_threshold: float = 0.30
-    # At most this many chunks go into the prompt. More context = slower answers
-    # on a CPU, and more chances to mix up two articles.
+    # At most this many chunks go into the prompt. On a CPU the model spends most
+    # of an answer READING the prompt, so this is the main latency knob (v11):
+    # 1 source instead of 3 took 5.8 s instead of 7.2 s (P50), but the right
+    # article was among the sources less often (0.73 vs 0.80) and one fewer
+    # answer was correct. Kept at 3: a slower right answer beats a faster wrong one.
     answer_max_sources: int = 3
     # Upper bound on the answer's length, in tokens (roughly 3/4 of a word each).
     # Generation time grows with it, so it caps the work one request can cause.
