@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.12.0"
+    app_version: str = "0.13.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -105,6 +105,13 @@ class Settings(BaseSettings):
     # like the trained classifier. The default would be the system temp folder,
     # which the OS may clear - and then the next start downloads it again.
     embedding_cache_dir: str = "models/embeddings"
+    # The embedding service (v13): the one process that loads the embedding
+    # model (uvicorn app.embedding_service.main:app --port 8002). The API and
+    # the worker call it; only the service reads embedding_cache_dir.
+    embedding_service_url: str = "http://127.0.0.1:8002"
+    # One question takes milliseconds; 64 chunks of 800 characters take a few
+    # seconds on this laptop. 60 s leaves room for a busy machine.
+    embedding_service_timeout_seconds: float = 60.0
 
     # Generated answers (v10). A small instruction-following language model,
     # run on the CPU by llama.cpp from one GGUF file (a model packed into a

@@ -325,7 +325,7 @@ def test_the_worker_loop_survives_errors(monkeypatch, caplog):
     assert "Worker stopped" in caplog.text
 
 
-def test_the_worker_starts_even_if_the_model_cannot_load(monkeypatch, caplog):
+def test_the_worker_starts_even_if_the_embedding_service_is_down(monkeypatch, caplog):
     """A missing model is reported at start, and the worker keeps running:
     documents are retried and succeed once the model is back."""
     from app import worker
@@ -343,7 +343,7 @@ def test_the_worker_starts_even_if_the_model_cannot_load(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger="app.worker"):
         worker.main()
 
-    assert "Embedding model could not be loaded" in caplog.text
+    assert "Embedding service is not available" in caplog.text
     assert "Worker started" in caplog.text
 
 

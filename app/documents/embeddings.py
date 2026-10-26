@@ -6,49 +6,35 @@ business days", so keyword search misses it. An embedding model maps both
 sentences to nearby points in a 384-dimensional space, because they mean nearly
 the same thing. Closeness between two embeddings is the search score.
 
-The model runs locally on the CPU. It is downloaded once (~90 MB) on first use
-into EMBEDDING_CACHE_DIR; after that no network is needed.
+Since v13 the model does not run here. It runs in the embedding service
+(app/embedding_service/main.py), and this module asks it over HTTP. The API
+and the worker both call embed_texts() exactly as before; neither loads the
+model any more.
 """
 
-import logging
-from functools import lru_cache
-
-# NumPy stores the vectors as compact arrays of numbers.
+import httpx
 import numpy as np
 
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
-
 
 # How many numbers the model returns per text. The database column is declared
 # with this size (pgvector checks it on every insert), so a different model with
 # a different size needs a migration, not just a new EMBEDDING_MODEL setting.
 EMBEDDING_DIMENSIONS = 384
 
+# Texts per HTTP request. The service refuses more than 64 in one go.
+TEXTS_PER_REQUEST = 64
+
 
 class EmbeddingUnavailable(Exception):
-    """The model could not be loaded or could not run. Becomes 503 in the API."""
+    """The embedding service is down or failed. Becomes 503 in the API."""
 
 
-@lru_cache(maxsize=1)
-def _load_model(model_name: str):
-    """Load the model once per process and keep it in memory.
-
-    lru_cache remembers the return value: the first call takes seconds, every
-    later call returns the same model object at once.
-    """
-    # fastembed runs the model with ONNX Runtime, a small inference engine,
-    # instead of PyTorch. Same model, same vectors - but sentence-transformers
-    # (PyTorch) took ~125 s to import and load on the development laptop against
-    # ~28 s here, and PyTorch is a far bigger install (ADR-023).
-    #
-    # Imported here, not at the top of the file, so a process that never embeds
-    # anything (a migration, the ticket tests) does not pay for the import.
-    from fastembed import TextEmbedding
-
-    logger.info("Loading embedding model %s", model_name)
-    return TextEmbedding(model_name, cache_dir=settings.embedding_cache_dir)
+# One client per process, so connections to the service are reused.
+_client = httpx.Client(
+    base_url=settings.embedding_service_url,
+    timeout=httpx.Timeout(settings.embedding_service_timeout_seconds, connect=2.0),
+)
 
 
 def embed_texts(texts: list[str], model_name: str = settings.embedding_model) -> np.ndarray:
@@ -60,13 +46,16 @@ def embed_texts(texts: list[str], model_name: str = settings.embedding_model) ->
     """
     if not texts:
         return np.zeros((0, 0), dtype=np.float32)
-    try:
-        model = _load_model(model_name)
-        # embed() yields one vector per text; batch_size = texts per model run
-        # (bigger is faster, uses more memory).
-        vectors = np.array(list(model.embed(texts, batch_size=32)))
-    except Exception as error:
-        # A missing download, a corrupt cache, out of memory. Callers decide
-        # what that means: 503 for a search, a retry for the worker.
-        raise EmbeddingUnavailable(f"Embedding model {model_name!r} is unavailable") from error
-    return vectors.astype(np.float32)
+    vectors = []
+    for start in range(0, len(texts), TEXTS_PER_REQUEST):
+        batch = texts[start : start + TEXTS_PER_REQUEST]
+        try:
+            response = _client.post("/embed", json={"texts": batch, "model": model_name})
+        except httpx.HTTPError as error:
+            # Not running, not reachable, or too slow. Callers decide what that
+            # means: 503 for a search, a retry for the worker.
+            raise EmbeddingUnavailable("The embedding service is unreachable") from error
+        if response.status_code != 200:
+            raise EmbeddingUnavailable(f"Embedding service answered {response.status_code}")
+        vectors.extend(response.json()["vectors"])
+    return np.array(vectors, dtype=np.float32)

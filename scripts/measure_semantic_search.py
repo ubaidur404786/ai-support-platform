@@ -37,7 +37,6 @@ from app.auth.models import User  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.database import SessionLocal  # noqa: E402
 from app.documents import embeddings  # noqa: E402
-from app.documents.embeddings import embed_texts  # noqa: E402
 from app.documents.models import READY, Document, DocumentChunk  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:8000"
@@ -66,20 +65,20 @@ def chunk_text(rng: random.Random) -> str:
 def measure_model() -> None:
     print("Part 1 - the model, in-process")
     start = time.perf_counter()
-    embeddings._load_model(settings.embedding_model)
+    embedding_model.load(settings.embedding_model)
     print(f"  load (first use in a process):  {time.perf_counter() - start:.2f} s")
 
     timings = []
     for question in QUESTIONS * 6:
         start = time.perf_counter()
-        embed_texts([question])
+        embedding_model.embed([question], settings.embedding_model)
         timings.append((time.perf_counter() - start) * 1000)
     print(f"  embed one question:  P50 {statistics.median(timings):.1f} ms  (n={len(timings)})")
 
     rng = random.Random()
     texts = [chunk_text(rng) for _ in range(500)]
     start = time.perf_counter()
-    embed_texts(texts)
+    embedding_model.embed(texts, settings.embedding_model)
     seconds = time.perf_counter() - start
     print(f"  embed 500 chunks of ~800 chars:  {seconds:.1f} s = {500 / seconds:.0f} chunks/s")
 

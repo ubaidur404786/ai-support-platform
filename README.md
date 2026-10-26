@@ -299,10 +299,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v12 — Model service.** See
-[docs/versions/v12-model-service.md](docs/versions/v12-model-service.md) for the full
+**v13 — Embedding service.** See
+[docs/versions/v13-embedding-service.md](docs/versions/v13-embedding-service.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v12-model-service/README.md](docs/versions/v12-model-service/README.md) for
+[docs/versions/v13-embedding-service/README.md](docs/versions/v13-embedding-service/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -322,7 +322,7 @@ a short guide.
 | v10 | `v10-rag` | Search returns passages, never answers, and never says "nothing relevant" | Complete |
 | v11 | `v11-answer-streaming` | ~6 s of blank screen before any answer. (The planned hybrid retrieval was measured first and made retrieval worse, hit@3 0.93 → 0.83, so it was not built) | Complete |
 | v12 | `v12-model-service` | The model lived inside every API process (2,380 MB each) and nothing limited the line: with 8 simultaneous users the slowest answer took 99 s | Complete |
-| v13 | `v13-caching` | Every repeated question costs a full 6–10 s answer — to be measured first: how often do questions repeat? | Next (proposed) |
+| v13 | `v13-embedding-service` | The API and the worker each loaded the same embedding model; the first semantic search after an API restart took 20.9 s (0.38 s after: the model loads once, in its own service) | Complete |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and

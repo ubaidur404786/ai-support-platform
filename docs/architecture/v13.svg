@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="760" viewBox="0 0 1040 760" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="760" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v13 — Embedding service: one copy of the embedding model, shared by the API and the worker</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: the API and the worker each loaded the same model; the first semantic search after an API restart took 20.9 s.</text>
+  <text x="30" y="74" fill="#1565c0">FIX: the model runs in app/embedding_service/ (port 8002), loaded at start-up; the API and the worker call POST /embed over HTTP.</text>
+
+  <!-- Callers -->
+  <rect x="20" y="100" width="330" height="120" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="32" y="120" font-weight="bold" fill="#222" font-size="12">API — app/main.py :8000</text>
+  <text x="32" y="140" fill="#333" font-size="11">GET /documents/search?q=money back&amp;mode=semantic</text>
+  <text x="32" y="156" fill="#333" font-size="11">POST /answers (retrieval step)</text>
+  <text x="32" y="176" fill="#333" font-size="11">service.py → embeddings.embed_texts([question])</text>
+  <text x="32" y="196" fill="#1565c0" font-size="11">no fastembed, no ONNX Runtime any more</text>
+
+  <rect x="20" y="240" width="330" height="110" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="32" y="260" font-weight="bold" fill="#222" font-size="12">Worker — app/worker.py</text>
+  <text x="32" y="280" fill="#333" font-size="11">queued upload → extract → chunk</text>
+  <text x="32" y="296" fill="#333" font-size="11">processing.py → embed_texts(256 chunks)</text>
+  <text x="32" y="316" fill="#333" font-size="11">client sends them as requests of 64</text>
+  <text x="32" y="336" fill="#1565c0" font-size="11">no model at start-up: checks the service instead</text>
+
+  <rect x="380" y="150" width="250" height="150" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="392" y="170" font-weight="bold" fill="#222" font-size="12">app/documents/embeddings.py</text>
+  <text x="392" y="188" fill="#333" font-size="11">same embed_texts() as v8–v12</text>
+  <text x="392" y="206" fill="#333" font-size="11">now an httpx client, timeout 60 s</text>
+  <text x="392" y="226" fill="#333" font-size="11">down / error → EmbeddingUnavailable</text>
+  <text x="392" y="242" fill="#333" font-size="11">→ 503 for search and answers</text>
+  <text x="392" y="258" fill="#333" font-size="11">→ retry later for the worker</text>
+  <text x="392" y="282" fill="#666" font-size="10">nothing that calls it had to change</text>
+
+  <line x1="350" y1="170" x2="378" y2="190" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="350" y1="290" x2="378" y2="260" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <line x1="630" y1="210" x2="690" y2="210" stroke="#1565c0" stroke-width="1.6" marker-end="url(#arrow-blue)"/>
+  <text x="634" y="200" fill="#1565c0" font-size="10">HTTP :8002</text>
+
+  <!-- Embedding service -->
+  <rect x="690" y="96" width="330" height="270" rx="8" fill="none" stroke="#1565c0" stroke-dasharray="5,4"/>
+  <text x="704" y="116" font-size="12" font-weight="bold" fill="#1565c0" letter-spacing="1">EMBEDDING SERVICE · NEW</text>
+  <text x="704" y="132" fill="#666" font-size="10">turns text into vectors for the API and the worker</text>
+
+  <rect x="706" y="144" width="298" height="96" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="718" y="163" font-weight="bold" fill="#222" font-size="12">main.py</text>
+  <text x="718" y="181" fill="#333" font-size="11">POST /embed {"texts": [...], "model": "..."}</text>
+  <text x="718" y="197" fill="#333" font-size="11">→ {"vectors": [[0.01, …384 numbers], …]}</text>
+  <text x="718" y="215" fill="#333" font-size="11">other model → 400 · &gt; 64 texts → 422</text>
+  <text x="718" y="231" fill="#333" font-size="11">GET /health → {"status": "ok", "model_loaded": true}</text>
+
+  <rect x="706" y="252" width="298" height="98" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="718" y="271" font-weight="bold" fill="#222" font-size="12">model.py (moved from documents/)</text>
+  <text x="718" y="289" fill="#333" font-size="11">fastembed · all-MiniLM-L6-v2 · ONNX Runtime</text>
+  <text x="718" y="305" fill="#333" font-size="11">loaded ONCE at start-up (5 s), not on a request</text>
+  <text x="718" y="325" fill="#666" font-size="10">the only file in app/ allowed to use fastembed</text>
+  <text x="718" y="339" fill="#666" font-size="10">(a test checks it, like llama_cpp in v12)</text>
+
+  <!-- unchanged -->
+  <rect x="380" y="320" width="250" height="46" rx="6" fill="#f4f6f8" stroke="#999"/>
+  <text x="392" y="339" fill="#333" font-size="11">Model service :8001 and PostgreSQL</text>
+  <text x="392" y="355" fill="#666" font-size="10">unchanged since v12 / v9</text>
+
+  <!-- Measurements -->
+  <text x="30" y="398" font-size="12" font-weight="bold" fill="#222" letter-spacing="1">MEASURED LOCALLY — CPU laptop, 8 GB RAM, same session, scripts/measure_embedding_service.py</text>
+
+  <rect x="20" y="410" width="330" height="130" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="32" y="430" font-weight="bold" fill="#222" font-size="12">First semantic search after API start</text>
+  <text x="32" y="452" fill="#c62828" font-size="11">v12: 20,862 ms (model loaded inside the request)</text>
+  <text x="32" y="470" fill="#1565c0" font-size="11">v13: 377 ms (209 ms on a second run)</text>
+  <text x="32" y="492" fill="#333" font-size="11">next 20 searches P50: 386 ms → 252 ms</text>
+  <text x="32" y="510" fill="#666" font-size="10">P50 change is within this laptop's noise —</text>
+  <text x="32" y="524" fill="#666" font-size="10">not claimed as a result</text>
+
+  <rect x="360" y="410" width="320" height="130" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="372" y="430" font-weight="bold" fill="#222" font-size="12">Memory (Windows private bytes)</text>
+  <text x="372" y="452" fill="#333" font-size="11">API: 975 → 852 MB · worker: 556 → 421 MB</text>
+  <text x="372" y="470" fill="#333" font-size="11">embedding service: 530 MB (new)</text>
+  <text x="372" y="490" fill="#c62828" font-size="11">total: 1,531 → 1,803 MB — UP with one API</text>
+  <text x="372" y="510" fill="#666" font-size="10">each API copy is ~125 MB lighter, so it pays</text>
+  <text x="372" y="524" fill="#666" font-size="10">back from the 3rd copy (v16 runs 3)</text>
+
+  <rect x="690" y="410" width="330" height="130" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="702" y="430" font-weight="bold" fill="#222" font-size="12">Failure checked by hand</text>
+  <text x="702" y="452" fill="#333" font-size="11">embedding service stopped:</text>
+  <text x="702" y="470" fill="#333" font-size="11">semantic search → 503</text>
+  <text x="702" y="488" fill="#333" font-size="11">keyword search → 200 (does not need it)</text>
+  <text x="702" y="506" fill="#333" font-size="11">uploads wait in the queue, retried later</text>
+  <text x="702" y="526" fill="#666" font-size="10">tests: 247 (9 new)</text>
+
+  <!-- Next limitation -->
+  <rect x="20" y="562" width="1000" height="176" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="34" y="584" font-weight="bold" fill="#c62828" font-size="13">NEXT LIMITATION → v14-containers</text>
+  <text x="34" y="608" fill="#333" font-size="12">• Four processes (API, worker, model service, embedding service) started by hand in four terminals; nothing restarts one that dies.</text>
+  <text x="34" y="630" fill="#333" font-size="12">• The Dockerfile is still the v0 one: it does not run any of the services, and its image would include libraries the API no longer uses.</text>
+  <text x="34" y="652" fill="#333" font-size="12">• The API's /health says nothing about the model and embedding services.</text>
+  <text x="34" y="674" fill="#333" font-size="12">• The two model services trust any caller; on a shared network they must not be reachable from outside.</text>
+  <text x="34" y="696" fill="#333" font-size="12">• Still open: one CPU writes 5–10 answers a minute; rate limits are per process (matters with several API copies, v16).</text>
+</svg>

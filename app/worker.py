@@ -31,18 +31,18 @@ logger = logging.getLogger("app.worker")
 
 
 def load_embedding_model() -> None:
-    """Load the model now, before the first document, not in the middle of it.
+    """Check the embedding service now, before the first document.
 
-    Loading takes tens of seconds. Done here, the first upload does not pay
-    for it, and a model that cannot load is reported the moment the worker
-    starts rather than discovered on someone's upload.
+    Since v13 the model lives in the embedding service, not here. One small
+    request at start-up means a service that is down is reported the moment
+    the worker starts, rather than discovered on someone's upload.
     """
     try:
         embed_texts(["warm up"])
     except EmbeddingUnavailable:
         # Keep running: documents are retried (up to WORKER_MAX_ATTEMPTS) and
         # succeed once the model is available again.
-        logger.exception("Embedding model could not be loaded")
+        logger.exception("Embedding service is not available")
 
 
 def run_forever() -> None:

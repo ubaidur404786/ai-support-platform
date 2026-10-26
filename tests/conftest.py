@@ -51,6 +51,26 @@ def migrated_database():
     command.upgrade(Config("alembic.ini"), "head")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def embedding_service():
+    """The real embedding service, in memory, for every test.
+
+    Since v13 the API and the worker ask the embedding service for vectors over
+    HTTP. FastAPI's TestClient is an httpx client that calls an app directly,
+    so putting one where embeddings.py keeps its client gives the tests the
+    real service without starting a second process. "with" runs the service's
+    start-up, which loads the model once for the whole test run.
+    """
+    from app.documents import embeddings
+    from app.embedding_service.main import app as service_app
+
+    with TestClient(service_app) as service_client:
+        original = embeddings._client
+        embeddings._client = service_client
+        yield service_client
+        embeddings._client = original
+
+
 @pytest.fixture
 def clean_database():
     """Empty the tables and reset id sequences before a test runs.
