@@ -40,7 +40,7 @@ Expected output, one line at a time:
 ## Test
 
 ```bash
-pytest tests/test_answers_api.py -v
+pytest tests/test_v10_answers_api.py -v
 ```
 
 ## Results (measured locally, CPU laptop, 25 answered questions)

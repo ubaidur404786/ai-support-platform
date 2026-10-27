@@ -96,7 +96,7 @@ model-service (healthy) ─────┘   worker
 | `app/health/router.py`, `schemas.py` | `model_service` and `embedding_service` fields |
 | `app/core/config.py` | `jwt_secret_key` defaults to empty; version 0.14.0 |
 | `app/main.py` | refuses to start without a key of 32 or more characters |
-| `tests/test_health_services.py` | new: 5 tests |
+| `tests/test_v14_health_services.py` | new: 5 tests |
 | `scripts/smoke_test.py` | new: register → upload → wait → streamed answer, against any address |
 
 ## How to Test

@@ -1,6 +1,6 @@
 """Tests for semantic search through the pgvector index (v9).
 
-The API tests in test_documents_api.py use a handful of chunks. On a table that
+The API tests in test_v06_documents_api.py use a handful of chunks. On a table that
 small PostgreSQL never bothers with the HNSW index - reading every row is
 cheaper - so those tests pass whether the index works or not. These tests make
 the database use the index, and check two things that only show up then:

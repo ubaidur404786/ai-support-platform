@@ -287,7 +287,7 @@ One client can occupy the server for two seconds.
 
 ### Tests
 
-47 passing (~28 s, up from ~7 s). `tests/test_ticket_service.py` passes with only one import
+47 passing (~28 s, up from ~7 s). `tests/test_v01_ticket_service.py` passes with only one import
 changed — the evidence that PostgreSQL never reached the business logic.
 
 ## Interview Explanation

@@ -57,7 +57,7 @@ Same answer as v8, now computed inside PostgreSQL.
 pytest -v
 ```
 
-Worth reading, in `tests/test_vector_search.py`:
+Worth reading, in `tests/test_v09_vector_search.py`:
 
 - `test_the_search_query_can_use_the_vector_index`: it fails if the query uses a distance the index
   was not built for.

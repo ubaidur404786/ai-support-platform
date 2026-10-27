@@ -21,7 +21,7 @@ kubectl apply -k k8s
 ## Test
 
 ```bash
-pytest tests/test_redis_rate_limit.py -v
+pytest tests/test_v16_redis_rate_limit.py -v
 ```
 
 ```bash

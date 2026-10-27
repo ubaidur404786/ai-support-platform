@@ -6,7 +6,7 @@ documents - it means "an authenticated client" (see conftest.py).
 
 Since v7 an upload only queues the document. process_queue() does, inside the
 test, what the worker process does in real life. The worker's own edge cases
-(crashes, retries, two workers) are in test_worker.py.
+(crashes, retries, two workers) are in test_v07_worker.py.
 """
 
 import pytest

@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="640" fill="#ffffff"/>
+
+  <text x="30" y="36" font-size="20" font-weight="bold" fill="#222">System architecture</text>
+  <text x="30" y="58" fill="#666">Each box is a separate container. Only the web app can be reached from outside.</text>
+
+  <!-- Row 1: user -> web -> api -->
+  <rect x="30" y="90" width="190" height="110" rx="8" fill="#f4f6f8" stroke="#555"/>
+  <text x="125" y="118" text-anchor="middle" font-weight="bold" fill="#222">User</text>
+  <text x="125" y="142" text-anchor="middle" fill="#444" font-size="12">browser</text>
+  <text x="125" y="166" text-anchor="middle" fill="#888" font-size="11">IN: question, document</text>
+  <text x="125" y="182" text-anchor="middle" fill="#888" font-size="11">OUT: answer + sources</text>
+
+  <rect x="290" y="90" width="190" height="110" rx="8" fill="#e8f0fe" stroke="#1565c0"/>
+  <text x="385" y="118" text-anchor="middle" font-weight="bold" fill="#222">Web app</text>
+  <text x="385" y="142" text-anchor="middle" fill="#444" font-size="12">React + nginx</text>
+  <text x="385" y="166" text-anchor="middle" fill="#888" font-size="11">shows the pages,</text>
+  <text x="385" y="182" text-anchor="middle" fill="#888" font-size="11">sends /api to the API</text>
+
+  <rect x="550" y="90" width="190" height="110" rx="8" fill="#e8f0fe" stroke="#1565c0"/>
+  <text x="645" y="118" text-anchor="middle" font-weight="bold" fill="#222">API  ×3</text>
+  <text x="645" y="142" text-anchor="middle" fill="#444" font-size="12">FastAPI</text>
+  <text x="645" y="166" text-anchor="middle" fill="#888" font-size="11">login, documents,</text>
+  <text x="645" y="182" text-anchor="middle" fill="#888" font-size="11">search, answers</text>
+
+  <rect x="810" y="90" width="160" height="110" rx="8" fill="#f4f6f8" stroke="#555"/>
+  <text x="890" y="118" text-anchor="middle" font-weight="bold" fill="#222">Redis</text>
+  <text x="890" y="142" text-anchor="middle" fill="#444" font-size="12">rate limits</text>
+  <text x="890" y="166" text-anchor="middle" fill="#888" font-size="11">shared by all</text>
+  <text x="890" y="182" text-anchor="middle" fill="#888" font-size="11">API copies</text>
+
+  <line x1="220" y1="145" x2="286" y2="145" stroke="#1565c0" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="480" y1="145" x2="546" y2="145" stroke="#1565c0" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="740" y1="145" x2="806" y2="145" stroke="#1565c0" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- Row 2: services -->
+  <rect x="30" y="300" width="210" height="120" rx="8" fill="#e8f0fe" stroke="#1565c0"/>
+  <text x="135" y="328" text-anchor="middle" font-weight="bold" fill="#222">Worker</text>
+  <text x="135" y="352" text-anchor="middle" fill="#444" font-size="12">background jobs</text>
+  <text x="135" y="376" text-anchor="middle" fill="#888" font-size="11">IN: uploaded file</text>
+  <text x="135" y="392" text-anchor="middle" fill="#888" font-size="11">OUT: text chunks + vectors</text>
+
+  <rect x="270" y="300" width="210" height="120" rx="8" fill="#e8f0fe" stroke="#1565c0"/>
+  <text x="375" y="328" text-anchor="middle" font-weight="bold" fill="#222">Embedding service</text>
+  <text x="375" y="352" text-anchor="middle" fill="#444" font-size="12">MiniLM (search model)</text>
+  <text x="375" y="376" text-anchor="middle" fill="#888" font-size="11">IN: text</text>
+  <text x="375" y="392" text-anchor="middle" fill="#888" font-size="11">OUT: 384 numbers (meaning)</text>
+
+  <rect x="510" y="300" width="210" height="120" rx="8" fill="#e8f0fe" stroke="#1565c0"/>
+  <text x="615" y="328" text-anchor="middle" font-weight="bold" fill="#222">Model service</text>
+  <text x="615" y="352" text-anchor="middle" fill="#444" font-size="12">Qwen2.5-1.5B (answer model)</text>
+  <text x="615" y="376" text-anchor="middle" fill="#888" font-size="11">IN: question + best chunks</text>
+  <text x="615" y="392" text-anchor="middle" fill="#888" font-size="11">OUT: answer, word by word</text>
+
+  <rect x="750" y="300" width="220" height="120" rx="8" fill="#f4f6f8" stroke="#555"/>
+  <text x="860" y="328" text-anchor="middle" font-weight="bold" fill="#222">PostgreSQL + pgvector</text>
+  <text x="860" y="352" text-anchor="middle" fill="#444" font-size="12">all data</text>
+  <text x="860" y="376" text-anchor="middle" fill="#888" font-size="11">users, documents, chunks,</text>
+  <text x="860" y="392" text-anchor="middle" fill="#888" font-size="11">vectors, job queue</text>
+
+  <!-- api down to services -->
+  <line x1="600" y1="200" x2="400" y2="296" stroke="#1565c0" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="630" y1="200" x2="615" y2="296" stroke="#1565c0" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="680" y1="200" x2="830" y2="296" stroke="#1565c0" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="240" y1="360" x2="266" y2="360" stroke="#1565c0" stroke-width="1.6" marker-end="url(#a)"/>
+  <path d="M135,420 L135,450 L860,450 L860,424" fill="none" stroke="#1565c0" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="400" y="444" fill="#1565c0" font-size="11">worker reads new uploads from the database and saves the results</text>
+
+  <!-- Flow -->
+  <rect x="30" y="480" width="940" height="140" rx="8" fill="#fafbfc" stroke="#ccc"/>
+  <text x="50" y="506" font-weight="bold" fill="#222">Asking a question, step by step</text>
+  <text x="50" y="532" fill="#333" font-size="12">1. The user types "How long does a refund take?" in the web app.</text>
+  <text x="50" y="552" fill="#333" font-size="12">2. The API asks the embedding service to turn the question into numbers.</text>
+  <text x="50" y="572" fill="#333" font-size="12">3. PostgreSQL finds the document chunks with the closest meaning.</text>
+  <text x="50" y="592" fill="#333" font-size="12">4. The model service writes an answer using only those chunks, and it is shown word by word.</text>
+  <text x="50" y="612" fill="#888" font-size="11">If no chunk is close enough, the answer is "I could not find an answer to that in the knowledge base" — the model is not even asked.</text>
+</svg>

@@ -1,6 +1,6 @@
 """Tests for the background worker's job handling (app/documents/processing.py).
 
-The happy path is covered through the API in test_documents_api.py. These are
+The happy path is covered through the API in test_v06_documents_api.py. These are
 the situations a queue exists to survive: two workers at once, a crash halfway,
 a failure while saving, a document deleted mid-processing.
 

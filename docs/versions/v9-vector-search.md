@@ -87,7 +87,7 @@ Files:
 | `app/documents/embeddings.py` | `EMBEDDING_DIMENSIONS = 384`; `to_bytes`/`from_bytes` removed |
 | `app/documents/processing.py` | writes the NumPy vector directly |
 | `app/documents/repository.py` | `semantic_search` is one SQL query; `HNSW_EF_SEARCH = 100` |
-| `tests/test_vector_search.py` | **new**: the query can use the index; a small organisation still gets results from it |
+| `tests/test_v09_vector_search.py` | **new**: the query can use the index; a small organisation still gets results from it |
 | `scripts/measure_vector_index.py` | **new**: exact vs index latency and recall, for `ef_search` 40/100/200 |
 | `requirements.in`, `requirements.txt` | `pgvector` (lets SQLAlchemy read and write `vector` columns) |
 
@@ -177,7 +177,7 @@ pytest -v
 ```
 
 ```bash
-pytest tests/test_vector_search.py -v
+pytest tests/test_v09_vector_search.py -v
 ```
 
 Search, as in v8 (the API did not change):
@@ -198,7 +198,7 @@ python scripts/measure_vector_index.py --organization-id 3
 
 - `docker exec ai-support-db psql -U support -d support_platform -c "\dx"` lists `vector 0.8.6`.
 - `alembic upgrade head` prints `Running upgrade d7a2c4e9b1f5 -> e5f1a8c3d9b2`.
-- The two tests in `tests/test_vector_search.py` pass.
+- The two tests in `tests/test_v09_vector_search.py` pass.
 - `measure_vector_index.py` prints `index used: yes` for the `ef_search` rows, and `no` for exact.
 
 ## Measurements

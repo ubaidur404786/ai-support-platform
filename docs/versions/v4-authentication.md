@@ -157,7 +157,7 @@ handler code; a disabled account stops working immediately; `is_active` means so
 | `app/auth/router.py` | `POST /auth/register`, `POST /auth/login` |
 | `app/core/errors.py` | `StorageError` moved here, plus `AlreadyExistsError` |
 | `alembic/versions/2f7c4a91b3de_*.py` | the migration |
-| `tests/test_auth_api.py` | 16 tests |
+| `tests/test_v04_auth_api.py` | 16 tests |
 
 ### `StorageError` moved to `app/core/errors.py`
 
@@ -224,7 +224,7 @@ credentials. Renaming it would have touched 68 call sites for no behavioural gai
 `anonymous_client` (so the refusal path is still exercised) and `second_org_client` (the
 only fixture that can prove isolation).
 
-`BrokenRepository`, the inline double in `test_tickets_api.py`, needed its signatures
+`BrokenRepository`, the inline double in `test_v01_tickets_api.py`, needed its signatures
 updated — **the same double that was missed in v3** when the protocol gained `limit`/
 `offset`. A `Protocol` has no runtime enforcement, so N implementations means N manual
 edits with no compiler help. Still the strongest argument in this repository for a type

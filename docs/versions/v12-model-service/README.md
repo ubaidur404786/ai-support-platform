@@ -47,7 +47,7 @@ Stop the model service and ask a question: `POST /answers` returns 503, and
 ## Test
 
 ```bash
-pytest tests/test_model_service.py tests/test_answers_api.py -v
+pytest tests/test_v12_model_service.py tests/test_v10_answers_api.py -v
 ```
 
 Load test (start the API with `RATE_LIMIT_ENABLED=false`):

@@ -77,14 +77,14 @@ Worker ─┘                                   └─   → {"vectors": [[0.01,
 | `app/core/config.py` | `embedding_service_url`, `embedding_service_timeout_seconds`; version 0.13.0 |
 | `app/worker.py` | the start-up check now checks the service |
 | `tests/conftest.py` | `embedding_service` fixture: the real service in memory for every test |
-| `tests/test_embedding_service.py` | new: 9 tests |
+| `tests/test_v13_embedding_service.py` | new: 9 tests |
 | `scripts/measure_embedding_service.py` | new: first search, next 20 searches, upload to ready |
 | `.env.example` | the two new settings |
 
 ## How to Test
 
 ```bash
-pytest tests/test_embedding_service.py -v
+pytest tests/test_v13_embedding_service.py -v
 ```
 
 ```bash

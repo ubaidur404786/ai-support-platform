@@ -86,13 +86,13 @@ At the end of v14, Docker Compose on one machine runs:
 | `app/core/config.py` | `redis_url`; version 0.16.0 |
 | `requirements.in`, `requirements.txt`, `docker/api/requirements.txt` | `redis` (8.1.0) |
 | `docker-compose.yml` | a `redis` service and `REDIS_URL`, so Compose matches the cluster |
-| `tests/test_redis_rate_limit.py` | new: 6 tests with a fake Redis, including "2 copies, limit 5, 8 requests → 5 allowed" |
+| `tests/test_v16_redis_rate_limit.py` | new: 6 tests with a fake Redis, including "2 copies, limit 5, 8 requests → 5 allowed" |
 | `scripts/measure_shared_rate_limit.py` | new: 30 wrong-password logins, counts 401 against 429 |
 
 ## How to Test
 
 ```bash
-pytest tests/test_redis_rate_limit.py -v
+pytest tests/test_v16_redis_rate_limit.py -v
 ```
 
 Follow `k8s/README.md` to start k3s, import the images, create the Secret and apply. Then:

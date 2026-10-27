@@ -166,8 +166,8 @@ server's CPU without bound; `/classify` is no longer anonymous; clients are told
 | `app/classification/router.py` | `/classify` requires a token and spends the inference budget |
 | `app/tickets/router.py` | `POST /tickets` spends the same inference budget |
 | `.env.example` | `RATE_LIMIT_ENABLED`, `AUTH_RATE_LIMIT_PER_MINUTE`, `INFERENCE_RATE_LIMIT_PER_MINUTE` |
-| `tests/test_rate_limit.py` | **new** — 20 tests: 11 on the algorithm with a fake clock, 9 through HTTP |
-| `tests/test_api.py` | `/classify` tests use an authenticated client; new `test_classify_requires_a_token` |
+| `tests/test_v05_rate_limit.py` | **new** — 20 tests: 11 on the algorithm with a fake clock, 9 through HTTP |
+| `tests/test_v00_api.py` | `/classify` tests use an authenticated client; new `test_classify_requires_a_token` |
 
 No migration: nothing new is stored in PostgreSQL.
 
@@ -182,7 +182,7 @@ pytest -v
 ```
 
 ```bash
-pytest tests/test_rate_limit.py -v
+pytest tests/test_v05_rate_limit.py -v
 ```
 
 Watch a login get refused (run the server with `uvicorn app.main:app`, then send 11 bad logins):

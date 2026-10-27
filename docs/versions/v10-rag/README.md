@@ -52,7 +52,7 @@ false` at once: nothing in the knowledge base is relevant, so the model is never
 ## Test
 
 ```bash
-pytest tests/test_answers_api.py -v
+pytest tests/test_v10_answers_api.py -v
 ```
 
 Most tests replace the model with a fake that records what it was sent, so they check our code:

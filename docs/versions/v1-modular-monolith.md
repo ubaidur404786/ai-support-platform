@@ -144,7 +144,7 @@ New:
 - `LOW_CONFIDENCE_THRESHOLD` setting (default 0.55)
 - `InMemoryTicketRepository` with a `threading.Lock` around id generation, because FastAPI
   runs synchronous endpoints in a thread pool and two requests can reach it at once
-- `tests/test_tickets_api.py` (17 cases) and `tests/test_ticket_service.py` (10 cases)
+- `tests/test_v01_tickets_api.py` (17 cases) and `tests/test_v01_ticket_service.py` (10 cases)
 - `tickets_client` fixture: a fresh app per test, so ticket state does not leak between tests
 - `scripts/measure_latency.py` now treats any 2xx as success (`POST /tickets` returns 201)
 

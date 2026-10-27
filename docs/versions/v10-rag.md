@@ -76,7 +76,7 @@ Files:
 | `scripts/choose_relevance_threshold.py` | **new**: best-score distributions and the threshold, chosen on one half and checked on the other |
 | `scripts/evaluate_rag.py` | **new**: correctness, citation, refusal and hallucination rates, and latency, through the API |
 | `scripts/download_generation_model.py` | **new**: fetches the model file (~1.1 GB) into `models/generation` |
-| `tests/test_answers_api.py` | **new**: 9 tests |
+| `tests/test_v10_answers_api.py` | **new**: 9 tests |
 | `requirements.in`, `requirements.txt` | `llama-cpp-python` (with the index of prebuilt CPU wheels) |
 
 ## Why This Solution?

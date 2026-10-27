@@ -68,7 +68,7 @@ Files:
 | `app/answers/service.py` | `retrieve()` split out (used by both endpoints); `model_declined()`; `stream()` holds back 40 characters, stops on a refusal, and ends with `done` |
 | `app/answers/router.py` | `POST /answers/stream` (NDJSON); one `to_http_error()` for both endpoints |
 | `app/core/config.py` | version 0.11.0; `ANSWER_MAX_SOURCES` comment now carries the measured trade-off |
-| `tests/test_answers_api.py` | 8 new tests (17 in total) |
+| `tests/test_v10_answers_api.py` | 8 new tests (17 in total) |
 | `scripts/measure_answer_streaming.py` | **new**: whole vs streamed: sources, first text, done |
 | `scripts/compare_hybrid_retrieval.py` | **new**: semantic vs hybrid (RRF) on the retrieval questions |
 
@@ -134,7 +134,7 @@ than a faster wrong one.
 ## How to Test
 
 ```bash
-pytest tests/test_answers_api.py -v
+pytest tests/test_v10_answers_api.py -v
 ```
 
 With the API running and the model downloaded:

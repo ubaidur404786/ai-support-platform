@@ -20,8 +20,8 @@ from app.answers.generator import GenerationUnavailable
 from app.core.config import settings
 from app.model_service import main as model_service
 from app.model_service import model as model_service_model
-from tests.test_documents_api import PASSWORDS, REFUNDS, upload_and_process
-from tests.test_model_service import FakeLlama
+from tests.test_v06_documents_api import PASSWORDS, REFUNDS, upload_and_process
+from tests.test_v12_model_service import FakeLlama
 
 
 class FakeModel:

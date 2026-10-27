@@ -35,7 +35,7 @@ python -m app.worker
 ## Test
 
 ```bash
-pytest tests/test_embedding_service.py -v
+pytest tests/test_v13_embedding_service.py -v
 ```
 
 ```bash

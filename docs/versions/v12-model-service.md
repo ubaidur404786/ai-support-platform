@@ -93,8 +93,8 @@ Files:
 | `app/answers/service.py` | `stream()` became `open_stream()`, which connects to the model **before** returning the events |
 | `app/answers/router.py` | busy → 503 with `Retry-After`; streaming uses `open_stream()` |
 | `app/core/config.py` | version 0.12.0; `MODEL_SERVICE_URL`, `MODEL_SERVICE_TIMEOUT_SECONDS`, `MODEL_MAX_QUEUE` (4), `MODEL_BUSY_RETRY_AFTER_SECONDS` (10) |
-| `tests/test_model_service.py` | **new**: 8 tests |
-| `tests/test_answers_api.py` | 4 new tests (API ↔ model service); real-model tests now go through the model service |
+| `tests/test_v12_model_service.py` | **new**: 8 tests |
+| `tests/test_v10_answers_api.py` | 4 new tests (API ↔ model service); real-model tests now go through the model service |
 | `scripts/load_test_answers.py` | **new**: concurrent users, P50/P95/max, answers/min, `/health` during the run |
 
 ## Why This Solution?
@@ -158,7 +158,7 @@ real capacity of this CPU. The service does not pretend otherwise; it makes the 
 ## How to Test
 
 ```bash
-pytest tests/test_model_service.py tests/test_answers_api.py -v
+pytest tests/test_v12_model_service.py tests/test_v10_answers_api.py -v
 ```
 
 Run the three processes (three terminals), with `DB_ECHO=false`:

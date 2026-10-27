@@ -57,7 +57,7 @@ upload again: the document stays `queued` until you start the worker again. Noth
 pytest -v
 ```
 
-Worth reading in `tests/test_worker.py`: `test_two_workers_never_take_the_same_document`
+Worth reading in `tests/test_v07_worker.py`: `test_two_workers_never_take_the_same_document`
 (SKIP LOCKED), `test_a_failure_while_saving_leaves_no_chunks_and_retries`,
 `test_a_worker_that_was_replaced_throws_its_result_away`, and
 `test_the_worker_process_knows_every_table_it_writes` (a bug only a separate process could have).

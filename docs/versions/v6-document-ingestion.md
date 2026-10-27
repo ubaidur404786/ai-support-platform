@@ -180,8 +180,8 @@ work.
 | `app/core/config.py`, `app/main.py`, `.env.example` | version 0.6.0; document, chunk, search and ingestion-limit settings; middleware and router wiring |
 | `alembic/env.py` | registers the document models |
 | `requirements.in` / `requirements.txt` | `python-multipart`, `pypdf` |
-| `tests/test_ingestion_pipeline.py` | **new** — 29 tests, no HTTP and no database |
-| `tests/test_documents_api.py` | **new** — 31 API tests |
+| `tests/test_v06_ingestion_pipeline.py` | **new** — 29 tests, no HTTP and no database |
+| `tests/test_v06_documents_api.py` | **new** — 31 API tests |
 | `tests/pdf_factory.py` | **new** — writes real PDFs in memory, with no extra dependency |
 | `tests/conftest.py` | truncates the two new tables |
 | `evaluation/knowledge_base/*.md`, `evaluation/retrieval_questions.jsonl` | **new** — 20 help articles, 30 questions (15 lexical, 15 paraphrase) |

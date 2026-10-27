@@ -116,7 +116,7 @@ See ADRs: [ADR-010](../adr/ADR-010-offset-pagination.md),
   `total` now comes from the count query instead of `len(items)`
 - `app/tickets/dependencies.py` — passes the two new settings into the service
 - `tests/fakes.py` — the fake repository supports `limit`/`offset` and filtered `count()`
-- `tests/test_tickets_api.py`, `tests/test_ticket_service.py` — pagination tests added
+- `tests/test_v01_tickets_api.py`, `tests/test_v01_ticket_service.py` — pagination tests added
 - `.env.example` — the two new settings
 
 ### A latent bug fixed on the way
