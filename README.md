@@ -4,7 +4,11 @@ An AI-powered support and knowledge automation platform, built as one continuous
 system. Each version starts from a measured limitation of the previous one and introduces the
 smallest architectural change that solves it.
 
-**Current version: v12 — Model service** (branch `v12-model-service`)
+**Current version: v17 — React web app** (branch `v17-react-frontend`)
+
+### How it works for a user
+
+![How the system works for a user](docs/architecture/user-flow.svg)
 
 ## 1. Project Overview
 
@@ -16,7 +20,8 @@ The engineering goal is a production-style AI system whose every component can b
 what problem forced it in, what it costs, and what happens when it fails. The architecture
 history is preserved as branches (`v0-baseline`, `v1-modular-monolith`, `v2-postgresql`,
 `v3-pagination`, `v4-authentication`, `v5-rate-limiting`, `v6-document-ingestion`,
-`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, `v10-rag`, `v11-answer-streaming`, `v12-model-service`, ...)
+`v7-async-processing`, `v8-embeddings`, `v9-vector-search`, `v10-rag`, `v11-answer-streaming`, `v12-model-service`, `v13-embedding-service`, `v14-containers`, `v15-ci-docker-hub`,
+`v16-kubernetes`, `v17-react-frontend`)
 and documented in [`docs/versions/`](docs/versions/) and [`docs/adr/`](docs/adr/).
 
 ## 2. Problem Being Solved
@@ -43,12 +48,25 @@ a human steps in where the model is unsure rather than everywhere.
 | Meaning-based search: every chunk embedded locally (all-MiniLM-L6-v2), `mode=semantic`; paraphrase hit@3 0.47 → 0.87 | Available | v8 |
 | Vector search in PostgreSQL (pgvector, HNSW index): 147 ms at 50,000 chunks, recall@5 0.99 on real text | Available | v9 |
 | Retrieval-augmented answers (`POST /answers`): local Qwen2.5-1.5B via llama.cpp, a measured relevance threshold, sources with every answer; 0.95 of unanswerable questions refused | Available | v10 |
+| Answers streamed as they are written (`POST /answers/stream`, NDJSON) | Available | v11 |
+| Answer model in its own service with a bounded queue (503 + `Retry-After` when busy) | Available | v12 |
+| Embedding model in its own service, loaded once at start-up | Available | v13 |
+| Every service in its own Docker image; one-command start; CI publishing images | Available | v14–v15 |
+| Kubernetes: API ×3, shared rate limits in Redis | Available | v16 |
+| Web app: log in, upload documents, ask questions with live answers | Available | v17 |
 | Controlled actions (create / update tickets) with human approval | Planned | — |
 | Model evaluation, monitoring, and safe rollout | Planned | — |
 
 ## 4. Current Architecture
 
-![v12 architecture](docs/architecture/v12.svg)
+![v17 architecture](docs/architecture/v17.svg)
+
+**Since v13–v17, in short:** the system is five services, each in its own Docker image —
+the **web app** (React + nginx, the only public entry point, v17), the **API** (3 copies on
+Kubernetes, v16), the **worker**, the **model service** (answer model, v12) and the
+**embedding service** (search model, v13) — plus PostgreSQL and Redis (shared rate limits, v16).
+It runs with Docker Compose (v14) or on Kubernetes/k3s (v16); GitHub Actions tests every push and
+publishes the images (v15). The paragraphs below describe how the backend grew, version by version.
 
 A stateless FastAPI process organised by feature, with a TF-IDF + Logistic Regression
 classifier loaded at startup, and PostgreSQL as the system of record. Callers authenticate with
@@ -80,12 +98,18 @@ app/
 ├── documents/       POST/GET/DELETE /documents, GET /documents/search
 │                    upload: service → repository (document + file, status "queued")
 │                    processing.py: claim → extraction.py → chunking.py → embeddings.py → "ready" / "failed"
-│                    embeddings.py: the local embedding model (text → 384 numbers)
+│                    embeddings.py: HTTP client for the embedding service (since v13)
 ├── answers/         POST /answers, POST /answers/stream (router → service → generator.py, an
 │                    HTTP client for the model service)
 ├── model_service/   a separate app: main.py (queue limit, /generate, /generate/stream, /health),
 │                    model.py (llama.cpp — the only code that loads the answer model)
-└── worker.py        python -m app.worker — loads the model, then runs processing.py in a loop
+├── embedding_service/ a separate app: main.py (/embed, /health), model.py (fastembed)
+└── worker.py        python -m app.worker — checks the embedding service, then runs processing.py in a loop
+
+frontend/            React app (Vite) + nginx.conf (serves the page, proxies /api → API)
+docker/              one Dockerfile per service
+k8s/                 Kubernetes files (k3s), k8s/aws/ for the cloud
+.github/workflows/   CI: tests on every push, images to Docker Hub from main
 ```
 
 ## 5. Request Flow

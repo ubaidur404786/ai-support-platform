@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="820" viewBox="0 0 1100 820" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="820" fill="#ffffff"/>
+
+  <text x="30" y="36" font-size="21" font-weight="bold" fill="#222">How the system works for a user</text>
+  <text x="30" y="58" fill="#555">Sara, a support agent, opens the web app, adds her help articles, and asks a customer's question. Three steps, left to right.</text>
+
+  <!-- column headers -->
+  <rect x="30" y="80" width="330" height="40" rx="6" fill="#1565c0"/>
+  <text x="195" y="106" text-anchor="middle" font-size="15" font-weight="bold" fill="#ffffff">1. Sign in</text>
+  <rect x="385" y="80" width="330" height="40" rx="6" fill="#1565c0"/>
+  <text x="550" y="106" text-anchor="middle" font-size="15" font-weight="bold" fill="#ffffff">2. Upload a help article</text>
+  <rect x="740" y="80" width="330" height="40" rx="6" fill="#1565c0"/>
+  <text x="905" y="106" text-anchor="middle" font-size="15" font-weight="bold" fill="#ffffff">3. Ask a question</text>
+
+  <!-- what Sara does -->
+  <text x="30" y="148" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">WHAT SARA DOES (browser)</text>
+  <rect x="30" y="158" width="330" height="96" rx="6" fill="#e8f0fe" stroke="#1565c0"/>
+  <text x="44" y="180" fill="#222">Types organisation "Acme Support",</text>
+  <text x="44" y="198" fill="#222">email sara@acme.example and a password</text>
+  <text x="44" y="216" fill="#222">(12+ characters), clicks Create account.</text>
+  <text x="44" y="238" fill="#666" font-size="11">Login.jsx</text>
+
+  <rect x="385" y="158" width="330" height="96" rx="6" fill="#e8f0fe" stroke="#1565c0"/>
+  <text x="399" y="180" fill="#222">Picks refund-policy.md (or a .txt / .pdf).</text>
+  <text x="399" y="198" fill="#222">The list shows it as "queued", then</text>
+  <text x="399" y="216" fill="#222">"processing", then "ready" — on its own.</text>
+  <text x="399" y="238" fill="#666" font-size="11">Documents.jsx (checks again every 2 s)</text>
+
+  <rect x="740" y="158" width="330" height="96" rx="6" fill="#e8f0fe" stroke="#1565c0"/>
+  <text x="754" y="180" fill="#222">Types "Can I get my money back?"</text>
+  <text x="754" y="198" fill="#222">and clicks Ask. The answer appears word</text>
+  <text x="754" y="216" fill="#222">by word, then the sources it used.</text>
+  <text x="754" y="238" fill="#666" font-size="11">Ask.jsx (reads the stream line by line)</text>
+
+  <!-- what the system does -->
+  <text x="30" y="286" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">WHAT HAPPENS BEHIND THE SCREEN</text>
+
+  <rect x="30" y="296" width="330" height="250" rx="6" fill="#f4f6f8" stroke="#999"/>
+  <text x="44" y="318" fill="#222" font-weight="bold">web (nginx) → api</text>
+  <text x="44" y="338" fill="#333" font-size="12">POST /api/auth/register</text>
+  <text x="44" y="356" fill="#333" font-size="12">POST /api/auth/login</text>
+  <text x="44" y="380" fill="#333" font-size="12">api: rate limit (Redis, 10/min per</text>
+  <text x="44" y="396" fill="#333" font-size="12">address) → password hashed with bcrypt</text>
+  <text x="44" y="412" fill="#333" font-size="12">→ new organisation + user in PostgreSQL</text>
+  <text x="44" y="436" fill="#333" font-size="12">→ returns a signed token (60 min)</text>
+  <text x="44" y="460" fill="#333" font-size="12">Every later request carries it:</text>
+  <text x="44" y="476" fill="#333" font-size="12">Authorization: Bearer eyJhbGciOi…</text>
+  <text x="44" y="500" fill="#666" font-size="11">Sara only ever sees Acme's data:</text>
+  <text x="44" y="516" fill="#666" font-size="11">each row belongs to one organisation.</text>
+
+  <rect x="385" y="296" width="330" height="250" rx="6" fill="#f4f6f8" stroke="#999"/>
+  <text x="399" y="318" fill="#222" font-weight="bold">api → PostgreSQL queue → worker</text>
+  <text x="399" y="338" fill="#333" font-size="12">POST /api/documents → 202 "queued"</text>
+  <text x="399" y="356" fill="#333" font-size="12">(the API only stores the file)</text>
+  <text x="399" y="380" fill="#333" font-size="12">worker picks it up (within ~1 s):</text>
+  <text x="399" y="396" fill="#333" font-size="12">read text → split into chunks of ~800</text>
+  <text x="399" y="412" fill="#333" font-size="12">characters → embedding service turns</text>
+  <text x="399" y="428" fill="#333" font-size="12">each chunk into 384 numbers (meaning)</text>
+  <text x="399" y="444" fill="#333" font-size="12">→ saved with pgvector → "ready"</text>
+  <text x="399" y="468" fill="#333" font-size="12">GET /api/documents shows the status</text>
+  <text x="399" y="500" fill="#666" font-size="11">measured: upload → ready ≈ 2.4–3.8 s</text>
+  <text x="399" y="516" fill="#666" font-size="11">for one help article</text>
+
+  <rect x="740" y="296" width="330" height="250" rx="6" fill="#f4f6f8" stroke="#999"/>
+  <text x="754" y="318" fill="#222" font-weight="bold">api → embedding → DB → model service</text>
+  <text x="754" y="338" fill="#333" font-size="12">POST /api/answers/stream</text>
+  <text x="754" y="356" fill="#333" font-size="12">1. question → 384 numbers (embedding)</text>
+  <text x="754" y="372" fill="#333" font-size="12">2. pgvector finds the 3 closest chunks</text>
+  <text x="754" y="388" fill="#333" font-size="12">3. score below 0.30 for all → "nothing</text>
+  <text x="754" y="404" fill="#333" font-size="12">   in your documents answers this"</text>
+  <text x="754" y="420" fill="#333" font-size="12">4. else the model service (Qwen2.5-1.5B)</text>
+  <text x="754" y="436" fill="#333" font-size="12">   writes an answer from those chunks only</text>
+  <text x="754" y="452" fill="#333" font-size="12">5. each piece is sent at once (NDJSON)</text>
+  <text x="754" y="476" fill="#333" font-size="12">more than 4 waiting → 503 "busy, retry</text>
+  <text x="754" y="492" fill="#333" font-size="12">in 10 s" instead of a long wait</text>
+  <text x="754" y="516" fill="#666" font-size="11">CPU only: first words after several seconds</text>
+
+  <line x1="360" y1="420" x2="383" y2="420" stroke="#1565c0" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="715" y1="420" x2="738" y2="420" stroke="#1565c0" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- what Sara sees -->
+  <text x="30" y="578" font-size="12" font-weight="bold" fill="#888" letter-spacing="1">WHAT SARA SEES</text>
+  <rect x="30" y="588" width="330" height="86" rx="6" fill="#ffffff" stroke="#1565c0"/>
+  <text x="44" y="612" fill="#222">The main page: "Ask a question" on the</text>
+  <text x="44" y="630" fill="#222">left, "Knowledge base" on the right.</text>
+  <text x="44" y="654" fill="#2e7d32" font-size="12">Bottom line: API ok · answer model ok · search model ok</text>
+
+  <rect x="385" y="588" width="330" height="86" rx="6" fill="#ffffff" stroke="#1565c0"/>
+  <text x="399" y="612" fill="#222">refund-policy.md</text>
+  <text x="640" y="612" fill="#2e7d32" font-weight="bold">ready</text>
+  <text x="399" y="638" fill="#666" font-size="12">A file the system cannot read shows "failed"</text>
+  <text x="399" y="654" fill="#666" font-size="12">with the reason, e.g. a scanned PDF.</text>
+
+  <rect x="740" y="588" width="330" height="86" rx="6" fill="#ffffff" stroke="#1565c0"/>
+  <text x="754" y="612" fill="#222" font-style="italic">"Yes, you can get your money back</text>
+  <text x="754" y="630" fill="#222" font-style="italic">through the refund process."</text>
+  <text x="754" y="654" fill="#666" font-size="12">Sources: 1. refund-policy (score 0.6…)</text>
+
+  <!-- footer -->
+  <rect x="30" y="696" width="1040" height="104" rx="6" fill="#fafbfc" stroke="#ccc"/>
+  <text x="44" y="718" font-weight="bold" fill="#222">Where it runs</text>
+  <text x="44" y="740" fill="#333" font-size="12">Only the web app is public: http://localhost:8080 (Docker Compose) or http://localhost:30080 (Kubernetes / k3s). The API, the two model</text>
+  <text x="44" y="758" fill="#333" font-size="12">services, the worker, PostgreSQL and Redis are internal. Every box above is its own container image, tested and published by CI.</text>
+  <text x="44" y="782" fill="#666" font-size="11">Files: frontend/src/ · app/auth/ · app/documents/ (processing.py, embeddings.py) · app/answers/ · app/model_service/ · app/embedding_service/ · k8s/</text>
+</svg>
