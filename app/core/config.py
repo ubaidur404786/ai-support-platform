@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.13.0"
+    app_version: str = "0.14.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -34,10 +34,12 @@ class Settings(BaseSettings):
     db_echo: bool = False
     log_level: str = "INFO"
 
-    # No default on purpose: the application must refuse to start rather than run
-    # with a guessable signing key. A forged token is every account at once.
+    # Empty by default, but the API refuses to start without one (create_app in
+    # app/main.py): with a guessable signing key, a forged token is every
+    # account at once. It is not required HERE because the model and embedding
+    # services share this settings class and never touch tokens (v14).
     # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"
-    jwt_secret_key: str
+    jwt_secret_key: str = ""
     # HS256 signs with one shared secret. RS256 signs with a private key and lets
     # other services verify with the public key - worth it when several services
     # must check tokens, which is not yet true here.

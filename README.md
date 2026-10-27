@@ -299,10 +299,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v13 — Embedding service.** See
-[docs/versions/v13-embedding-service.md](docs/versions/v13-embedding-service.md) for the full
+**v14 — Containers.** See
+[docs/versions/v14-containers.md](docs/versions/v14-containers.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v13-embedding-service/README.md](docs/versions/v13-embedding-service/README.md) for
+[docs/versions/v14-containers/README.md](docs/versions/v14-containers/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -323,6 +323,7 @@ a short guide.
 | v11 | `v11-answer-streaming` | ~6 s of blank screen before any answer. (The planned hybrid retrieval was measured first and made retrieval worse, hit@3 0.93 → 0.83, so it was not built) | Complete |
 | v12 | `v12-model-service` | The model lived inside every API process (2,380 MB each) and nothing limited the line: with 8 simultaneous users the slowest answer took 99 s | Complete |
 | v13 | `v13-embedding-service` | The API and the worker each loaded the same embedding model; the first semantic search after an API restart took 20.9 s (0.38 s after: the model loads once, in its own service) | Complete |
+| v14 | `v14-containers` | Five processes started by hand in four terminals, nothing restarted a crash, and the Dockerfile was still v0's; now one image per service and `docker compose up` | Complete |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -344,13 +345,29 @@ the document worker stops.
 
 ## 11. How to Run
 
-Requirements: Python 3.11 or 3.12, and Docker.
+### Everything in Docker (since v14)
 
-Start the database. The first run builds the PostgreSQL image with pgvector (a few minutes,
-needs network access); after that it starts in seconds:
+Requirements: Docker. Put `JWT_SECRET_KEY` in `.env` (see `.env.example`). The first build
+downloads both models into their images, so it needs network access and about 20 minutes.
 
 ```bash
 docker compose up -d --build
+```
+
+```bash
+docker compose ps
+```
+
+```bash
+python scripts/smoke_test.py http://localhost:8000
+```
+
+### As local processes (for development)
+
+Requirements: Python 3.11 or 3.12, and Docker for the database.
+
+```bash
+docker compose up -d db
 ```
 
 Then the application:

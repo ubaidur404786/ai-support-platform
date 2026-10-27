@@ -1,34 +1,114 @@
-# Runs the services the platform depends on locally.
-# Start with:  docker compose up -d
-# Stop with:   docker compose down
+# The whole platform on one machine: the database and four services.
+#
+#   docker compose up -d --build     build the images and start everything
+#   docker compose ps                see what is running and healthy
+#   docker compose logs -f api       follow one service's log
+#   docker compose down              stop (the database volume is kept)
+#
+# Only the API is published to your machine.
+# The database, the model service and the embedding service are on the
+# internal network only: other containers reach them by name (http://model-service:8001),
+# but nothing outside Docker can.
+
+x-app-settings: &app-settings
+  DATABASE_URL: postgresql+psycopg://support:support@db:5432/support_platform
+  MODEL_SERVICE_URL: http://model-service:8001
+  EMBEDDING_SERVICE_URL: http://embedding-service:8002
+  LOG_LEVEL: INFO
 
 services:
   db:
     # PostgreSQL 17 on Alpine plus pgvector (v9), built from docker/postgres.
-    # Rebuild after changing that Dockerfile:  docker compose build db
     build: docker/postgres
     image: ai-support-db:pg17-pgvector
     container_name: ai-support-db
     environment:
       # Local development credentials only. Real deployments take these from
-      # the environment or a secret manager - never from a committed file.
+      # a secret store (Kubernetes Secrets in v16).
       POSTGRES_USER: support
       POSTGRES_PASSWORD: support
       POSTGRES_DB: support_platform
     ports:
-      # host:container - the app on your machine connects to localhost:5432
+      # Kept for local development: the tests and scripts on your machine
+      # connect to localhost:5432. In Kubernetes (v16) the database is internal.
       - "5432:5432"
     volumes:
-      # A named volume keeps the data when the container is recreated.
-      # Without this, "docker compose down" would lose every row.
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      # Docker runs this to decide whether the database is ready to accept
-      # connections. "started" is not the same as "ready".
       test: ["CMD-SHELL", "pg_isready -U support -d support_platform"]
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # Runs the database migrations once, then exits. The API and the worker
+  # wait for it, so they never start against an old schema.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    image: support-api
+    command: ["alembic", "upgrade", "head"]
+    environment: *app-settings
+    depends_on:
+      db:
+        condition: service_healthy
+
+  embedding-service:
+    build:
+      context: .
+      dockerfile: docker/embedding-service/Dockerfile
+    image: support-embedding
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  model-service:
+    build:
+      context: .
+      dockerfile: docker/model-service/Dockerfile
+    image: support-model
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  api:
+    image: support-api
+    environment:
+      <<: *app-settings
+      # Read from your .env file (or the shell). Never written in this file.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      embedding-service:
+        condition: service_healthy
+      model-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  worker:
+    image: support-api
+    command: ["python", "-m", "app.worker"]
+    environment: *app-settings
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      embedding-service:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:

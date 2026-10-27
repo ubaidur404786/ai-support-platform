@@ -1,0 +1,20 @@
+# What the API and the worker need. No model libraries: since v12 and v13
+# the two models run in their own services. Exact versions come from the
+# root requirements.txt, used as a constraints file (see the Dockerfile).
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+scikit-learn
+joblib
+httpx
+numpy
+sqlalchemy
+psycopg[binary]
+alembic
+bcrypt
+pyjwt
+email-validator
+python-multipart
+pypdf
+pgvector

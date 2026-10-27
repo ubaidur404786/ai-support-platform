@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 def create_app(app_settings: Settings = settings) -> FastAPI:
     configure_logging(app_settings.log_level)
+    if len(app_settings.jwt_secret_key) < 32:
+        raise RuntimeError(
+            "JWT_SECRET_KEY is missing or shorter than 32 characters. Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(32))"'
+        )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

@@ -1,0 +1,6 @@
+# What the embedding service needs: a web server and the embedding model.
+fastapi
+uvicorn[standard]
+pydantic-settings
+fastembed
+numpy

@@ -1,0 +1,7 @@
+# What the model service needs: a web server and llama.cpp.
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+fastapi
+uvicorn[standard]
+pydantic-settings
+llama-cpp-python
+huggingface_hub

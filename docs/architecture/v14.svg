@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="760" viewBox="0 0 1040 760" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+  <rect width="1040" height="760" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v14 — Containers: one image per service, one command to start them all</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: 5 processes started by hand in 4 terminals; nothing restarted a crash; the Dockerfile was still v0's; /health ignored the model services.</text>
+  <text x="30" y="74" fill="#1565c0">FIX: docker/&lt;service&gt;/Dockerfile per service (models built in) + docker-compose.yml: start order by health checks, restart on crash, internal network.</text>
+
+  <!-- host -->
+  <rect x="20" y="92" width="150" height="70" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="32" y="112" font-weight="bold" fill="#222" font-size="12">Your machine</text>
+  <text x="32" y="130" fill="#333" font-size="11">curl / scripts</text>
+  <text x="32" y="146" fill="#333" font-size="11">localhost:8000</text>
+  <line x1="170" y1="127" x2="228" y2="127" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="172" y="118" fill="#333" font-size="10">:8000 only</text>
+
+  <!-- docker network -->
+  <rect x="230" y="92" width="790" height="390" rx="8" fill="none" stroke="#1565c0" stroke-dasharray="5,4"/>
+  <text x="244" y="112" font-size="12" font-weight="bold" fill="#1565c0" letter-spacing="1">DOCKER COMPOSE NETWORK — containers reach each other by name; only :8000 (and :5432 for dev) published</text>
+
+  <rect x="250" y="126" width="230" height="110" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="262" y="145" font-weight="bold" fill="#222" font-size="12">api — image support-api</text>
+  <text x="262" y="163" fill="#333" font-size="11">docker/api/Dockerfile · 683 MB</text>
+  <text x="262" y="179" fill="#333" font-size="11">no llama.cpp, no fastembed</text>
+  <text x="262" y="195" fill="#333" font-size="11">restart: unless-stopped</text>
+  <text x="262" y="211" fill="#1565c0" font-size="11">/health + model_service, embedding_service</text>
+  <text x="262" y="227" fill="#666" font-size="10">(reported, not part of its own "status")</text>
+
+  <rect x="250" y="252" width="230" height="70" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="262" y="271" font-weight="bold" fill="#222" font-size="12">worker — same image</text>
+  <text x="262" y="289" fill="#333" font-size="11">command: python -m app.worker</text>
+  <text x="262" y="305" fill="#333" font-size="11">restart: unless-stopped</text>
+
+  <rect x="250" y="338" width="230" height="64" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="262" y="357" font-weight="bold" fill="#222" font-size="12">migrate — same image, runs once</text>
+  <text x="262" y="375" fill="#333" font-size="11">alembic upgrade head → Exited (0)</text>
+  <text x="262" y="391" fill="#666" font-size="10">api and worker wait for it</text>
+
+  <rect x="540" y="126" width="220" height="96" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="552" y="145" font-weight="bold" fill="#222" font-size="12">model-service :8001</text>
+  <text x="552" y="163" fill="#333" font-size="11">image support-model</text>
+  <text x="552" y="179" fill="#333" font-size="11">llama.cpp + Qwen2.5-1.5B built in</text>
+  <text x="552" y="195" fill="#333" font-size="11">healthcheck → /health</text>
+  <text x="552" y="211" fill="#c62828" font-size="11">NOT reachable from the host</text>
+
+  <rect x="540" y="238" width="220" height="96" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="552" y="257" font-weight="bold" fill="#222" font-size="12">embedding-service :8002</text>
+  <text x="552" y="275" fill="#333" font-size="11">image support-embedding · 688 MB</text>
+  <text x="552" y="291" fill="#333" font-size="11">fastembed + MiniLM built in</text>
+  <text x="552" y="307" fill="#333" font-size="11">healthcheck → /health</text>
+  <text x="552" y="323" fill="#c62828" font-size="11">NOT reachable from the host</text>
+
+  <rect x="800" y="126" width="200" height="96" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="812" y="145" font-weight="bold" fill="#222" font-size="12">db :5432</text>
+  <text x="812" y="163" fill="#333" font-size="11">PostgreSQL 17 + pgvector</text>
+  <text x="812" y="179" fill="#333" font-size="11">volume postgres_data</text>
+  <text x="812" y="195" fill="#333" font-size="11">healthcheck pg_isready</text>
+
+  <line x1="480" y1="165" x2="538" y2="165" stroke="#1565c0" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+  <line x1="480" y1="200" x2="538" y2="270" stroke="#1565c0" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+  <line x1="480" y1="290" x2="538" y2="295" stroke="#1565c0" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+  <text x="484" y="156" fill="#1565c0" font-size="10">http://model-service:8001</text>
+
+  <!-- start order -->
+  <rect x="540" y="350" width="460" height="116" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="552" y="370" font-weight="bold" fill="#222" font-size="12">Start order (depends_on + health checks)</text>
+  <text x="552" y="390" fill="#333" font-size="11">1. db healthy → 2. migrate exits 0</text>
+  <text x="552" y="408" fill="#333" font-size="11">3. embedding-service + model-service healthy (model loaded)</text>
+  <text x="552" y="426" fill="#333" font-size="11">4. api + worker start · api healthy</text>
+  <text x="552" y="448" fill="#666" font-size="10">one command: docker compose up -d --build</text>
+
+  <!-- measurements -->
+  <text x="30" y="508" font-size="12" font-weight="bold" fill="#222" letter-spacing="1">MEASURED LOCALLY — CPU laptop, Docker Desktop VM with 4 GB, scripts/smoke_test.py</text>
+
+  <rect x="20" y="520" width="330" height="110" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="32" y="540" font-weight="bold" fill="#222" font-size="12">It works end to end</text>
+  <text x="32" y="560" fill="#333" font-size="11">tests: 258 passed (330 s)</text>
+  <text x="32" y="578" fill="#333" font-size="11">upload → ready: 3.57 s</text>
+  <text x="32" y="596" fill="#333" font-size="11">api killed → restarted (RestartCount 1)</text>
+  <text x="32" y="614" fill="#333" font-size="11">:8001, :8002 from the host → refused</text>
+
+  <rect x="360" y="520" width="320" height="110" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="372" y="540" font-weight="bold" fill="#222" font-size="12">Memory per container (docker stats)</text>
+  <text x="372" y="560" fill="#333" font-size="11">model-service 1.32 GiB · embedding 236 MiB</text>
+  <text x="372" y="578" fill="#333" font-size="11">api 160 MiB · worker 73 MiB · db 44 MiB</text>
+  <text x="372" y="600" fill="#666" font-size="10">Linux in-use memory: not comparable with the</text>
+  <text x="372" y="614" fill="#666" font-size="10">Windows private bytes of v12/v13</text>
+
+  <rect x="690" y="520" width="330" height="110" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="702" y="540" font-weight="bold" fill="#222" font-size="12">What got worse</text>
+  <text x="702" y="560" fill="#c62828" font-size="11">answer: 14.5 s warm (44.8 s first) vs 6–7 s natively</text>
+  <text x="702" y="578" fill="#333" font-size="11">the model runs inside the 4 GB Linux VM;</text>
+  <text x="702" y="596" fill="#333" font-size="11">cause not separated yet</text>
+  <text x="702" y="614" fill="#c62828" font-size="11">model image 4.88 GB (chown copied the model)</text>
+
+  <rect x="20" y="648" width="1000" height="92" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="34" y="670" font-weight="bold" fill="#c62828" font-size="13">NEXT LIMITATION → v15-ci-docker-hub</text>
+  <text x="34" y="692" fill="#333" font-size="12">• Images are built by hand on one laptop: nothing stops an untested commit from becoming an image, and no server can pull them.</text>
+  <text x="34" y="712" fill="#333" font-size="12">• Compose is one machine: it cannot run 3 API copies behind one name, roll out updates, or route only to ready copies (v16).</text>
+  <text x="34" y="732" fill="#333" font-size="12">• Nobody can use the product without curl (v17).</text>
+</svg>
