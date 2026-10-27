@@ -299,10 +299,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v14 — Containers.** See
-[docs/versions/v14-containers.md](docs/versions/v14-containers.md) for the full
+**v15 — CI and Docker Hub.** See
+[docs/versions/v15-ci-docker-hub.md](docs/versions/v15-ci-docker-hub.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v14-containers/README.md](docs/versions/v14-containers/README.md) for
+[docs/versions/v15-ci-docker-hub/README.md](docs/versions/v15-ci-docker-hub/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -324,6 +324,7 @@ a short guide.
 | v12 | `v12-model-service` | The model lived inside every API process (2,380 MB each) and nothing limited the line: with 8 simultaneous users the slowest answer took 99 s | Complete |
 | v13 | `v13-embedding-service` | The API and the worker each loaded the same embedding model; the first semantic search after an API restart took 20.9 s (0.38 s after: the model loads once, in its own service) | Complete |
 | v14 | `v14-containers` | Five processes started by hand in four terminals, nothing restarted a crash, and the Dockerfile was still v0's; now one image per service and `docker compose up` | Complete |
+| v15 | `v15-ci-docker-hub` | Images were built by hand and nothing tied them to passing tests; now GitHub Actions tests every push and publishes images from `main` (first push refused: read-only token) | Complete |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
