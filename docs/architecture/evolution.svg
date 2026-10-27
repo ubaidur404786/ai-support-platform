@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1836" viewBox="0 0 1180 1836" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="2346" viewBox="0 0 1180 2346" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
   <defs>
     <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
       <path d="M0,0 L8,4 L0,8 z" fill="#444"/>
     </marker>
   </defs>
 
-  <rect width="1180" height="1836" fill="#ffffff"/>
+  <rect width="1180" height="2346" fill="#ffffff"/>
 
-  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v12</text>
+  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v17</text>
   <text x="30" y="58" fill="#555">Each version exists because the previous one produced a measured limitation. Red = the problem. Blue = the change. Grey = what was measured.</text>
 
   <!-- ============ SECTION A: how the request path changed ============ -->
@@ -361,10 +361,110 @@
   <text x="896" y="1680" font-size="11" fill="#222">half of 8 users refused as busy</text>
   <text x="896" y="1702" font-size="10" fill="#777">1 run still 93 s max (cause unknown). 238 tests.</text>
 
+  <!-- row v13 -->
+  <rect x="30" y="1726" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="1769" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v13</text>
+  <text x="85" y="1785" text-anchor="middle" font-size="10" fill="#666">embedding service</text>
+  <rect x="146" y="1726" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="1746" font-size="11" fill="#333">API and worker each loaded the embedding model;</text>
+  <text x="158" y="1762" font-size="11" fill="#333">first semantic search after an API restart: 20.9 s.</text>
+  <text x="158" y="1778" font-size="11" fill="#333">API 975 MB, worker 556 MB.</text>
+  <text x="158" y="1800" font-size="11" fill="#c62828">Problem: the same model in two processes, loaded mid-request.</text>
+  <rect x="526" y="1726" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="1746" font-size="11" fill="#333">app/embedding_service/: the model loads once at start;</text>
+  <text x="538" y="1762" font-size="11" fill="#333">API + worker call POST /embed over HTTP (64 texts max).</text>
+  <text x="538" y="1778" font-size="11" fill="#333">Only that service may import fastembed (a test checks).</text>
+  <text x="538" y="1800" font-size="10" fill="#777">Total memory went UP with one API copy (1,531 → 1,803 MB).</text>
+  <rect x="884" y="1726" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="1746" font-size="11" fill="#222">first search: 20,862 → 377 ms</text>
+  <text x="896" y="1764" font-size="11" fill="#222">API 975 → 852 MB · worker 556 → 421 MB</text>
+  <text x="896" y="1782" font-size="11" fill="#222">service down: semantic 503, keyword 200</text>
+  <text x="896" y="1804" font-size="10" fill="#777">247 tests.</text>
+
+  <!-- row v14 -->
+  <rect x="30" y="1828" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="1871" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v14</text>
+  <text x="85" y="1887" text-anchor="middle" font-size="10" fill="#666">containers</text>
+  <rect x="146" y="1828" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="1848" font-size="11" fill="#333">5 processes started by hand in 4 terminals; nothing</text>
+  <text x="158" y="1864" font-size="11" fill="#333">restarted a crash; the Dockerfile was still v0's;</text>
+  <text x="158" y="1880" font-size="11" fill="#333">/health blind to the model services.</text>
+  <text x="158" y="1902" font-size="11" fill="#c62828">Problem: no repeatable way to run the system anywhere.</text>
+  <rect x="526" y="1828" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="1848" font-size="11" fill="#333">One image per service, models built in; docker compose:</text>
+  <text x="538" y="1864" font-size="11" fill="#333">start order by health checks, migrate once, restart on</text>
+  <text x="538" y="1880" font-size="11" fill="#333">crash; model services internal only.</text>
+  <text x="538" y="1902" font-size="10" fill="#777">/health reports both services without changing its status.</text>
+  <rect x="884" y="1828" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="1848" font-size="11" fill="#222">258 tests · API killed → restarted</text>
+  <text x="896" y="1866" font-size="11" fill="#222">:8001 / :8002 not reachable from host</text>
+  <text x="896" y="1884" font-size="11" fill="#222">answer 14.5 s in Docker vs 6–7 s natively</text>
+  <text x="896" y="1906" font-size="10" fill="#777">model image 4.88 GB (chown copied the model).</text>
+
+  <!-- row v15 -->
+  <rect x="30" y="1930" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="1973" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v15</text>
+  <text x="85" y="1989" text-anchor="middle" font-size="10" fill="#666">CI + Docker Hub</text>
+  <rect x="146" y="1930" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="1950" font-size="11" fill="#333">Images built by hand on one laptop; nothing tied</text>
+  <text x="158" y="1966" font-size="11" fill="#333">an image to a passing test run; no registry for</text>
+  <text x="158" y="1982" font-size="11" fill="#333">a server to pull from.</text>
+  <text x="158" y="2004" font-size="11" fill="#c62828">Problem: tested and shipped were two manual steps.</text>
+  <rect x="526" y="1930" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="1950" font-size="11" fill="#333">GitHub Actions: 'test' on every push (throwaway</text>
+  <text x="538" y="1966" font-size="11" fill="#333">pgvector DB); 'images' only on main after tests pass</text>
+  <text x="538" y="1982" font-size="11" fill="#333">→ Docker Hub as :latest and :&lt;commit id&gt;.</text>
+  <text x="538" y="2004" font-size="10" fill="#777">Real 1.1 GB answer model not exercised in CI.</text>
+  <rect x="884" y="1930" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="1950" font-size="11" fill="#222">tests on GitHub: passed, 2 min 35 s</text>
+  <text x="896" y="1968" font-size="11" fill="#222">push: 401 insufficient scopes</text>
+  <text x="896" y="1986" font-size="11" fill="#222">(read-only token, not a code bug)</text>
+  <text x="896" y="2008" font-size="10" fill="#777">needs a Read &amp; Write token.</text>
+
+  <!-- row v16 -->
+  <rect x="30" y="2032" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="2075" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v16</text>
+  <text x="85" y="2091" text-anchor="middle" font-size="10" fill="#666">Kubernetes</text>
+  <rect x="146" y="2032" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="2052" font-size="11" fill="#333">Compose ran one API container: a single point of</text>
+  <text x="158" y="2068" font-size="11" fill="#333">failure, no routing to ready copies, no rolling</text>
+  <text x="158" y="2084" font-size="11" fill="#333">update. In-memory rate limits per process (v5).</text>
+  <text x="158" y="2106" font-size="11" fill="#c62828">Problem: more copies needed, and they would break limits.</text>
+  <rect x="526" y="2032" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="2052" font-size="11" fill="#333">k8s/ on k3s: API ×3 behind a Service, model ×1, db</text>
+  <text x="538" y="2068" font-size="11" fill="#333">StatefulSet + disk, migrate Job, probes. Counters in</text>
+  <text x="538" y="2084" font-size="11" fill="#333">Redis (INCR + EXPIRE 60), fail open.</text>
+  <text x="538" y="2106" font-size="10" fill="#777">Docker Desktop's Kubernetes never started; k3s did in 40 s.</text>
+  <rect x="884" y="2032" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="2052" font-size="11" fill="#222">3 copies, limit 10: 30 of 30 let through</text>
+  <text x="896" y="2070" font-size="11" fill="#222">→ with Redis: 10 of 30</text>
+  <text x="896" y="2088" font-size="11" fill="#222">pod deleted: 40 of 40 /health ok</text>
+  <text x="896" y="2110" font-size="10" fill="#777">cluster: 2.26 GiB.</text>
+
+  <!-- row v17 -->
+  <rect x="30" y="2134" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="2177" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v17</text>
+  <text x="85" y="2193" text-anchor="middle" font-size="10" fill="#666">React web app</text>
+  <rect x="146" y="2134" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="2154" font-size="11" fill="#333">Usable only with curl; nothing in the cluster</text>
+  <text x="158" y="2170" font-size="11" fill="#333">reachable from outside; a proxy would make every</text>
+  <text x="158" y="2186" font-size="11" fill="#333">user share one login limit.</text>
+  <text x="158" y="2208" font-size="11" fill="#c62828">Problem: no product to use, and no way in.</text>
+  <rect x="526" y="2134" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="2154" font-size="11" fill="#333">frontend/ (Vite + React, plain JS) served by nginx;</text>
+  <text x="538" y="2170" font-size="11" fill="#333">/api proxied to api:8000 (same origin, no CORS);</text>
+  <text x="538" y="2186" font-size="11" fill="#333">web = the only NodePort; uvicorn --proxy-headers.</text>
+  <text x="538" y="2208" font-size="10" fill="#777">Not clicked through in a real browser yet.</text>
+  <rect x="884" y="2134" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="2154" font-size="11" fill="#222">page + bundle 200 · web 11–14 MiB</text>
+  <text x="896" y="2172" font-size="11" fill="#222">stream: 24 pieces over 2.4 s through nginx</text>
+  <text x="896" y="2190" font-size="11" fill="#222">smoke test end to end: OK</text>
+  <text x="896" y="2212" font-size="10" fill="#777">answer ~27–43 s in the laptop's VM.</text>
+
   <!-- next -->
-  <rect x="30" y="1738" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
-  <text x="44" y="1760" font-size="12" font-weight="bold" fill="#222">Open after v12 — what the next versions must answer</text>
-  <text x="44" y="1780" font-size="11.5" fill="#333">1. Capacity is one CPU (5–10 answers/min) → GPU + batching engine later (v15-llm-serving).   2. Repeated questions recomputed → caching (v13), if they repeat.</text>
-  <text x="44" y="1796" font-size="11.5" fill="#333">3. API /health blind to the model service.   4. Paraphrase misses (sources right 80%).   5. Wrong answers not detected at runtime.   6. Per-process rate limits.</text>
-  <text x="44" y="1812" font-size="11.5" fill="#333">7. Nothing alerts on a stopped worker or model service.   8. No token revocation, no type checker.   9. Laptop at its memory limit.</text>
+  <rect x="30" y="2248" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
+  <text x="44" y="2270" font-size="12" font-weight="bold" fill="#222">Open after v17 — what the next versions must answer</text>
+  <text x="44" y="2290" font-size="11.5" fill="#333">1. Runs only on this laptop → v18: k3s on one AWS machine pulling from Docker Hub (needs a write token).   2. Capacity is one CPU (5–10 answers/min).</text>
+  <text x="44" y="2306" font-size="11.5" fill="#333">3. Answers slow inside the laptop's Docker VM.   4. Paraphrase misses (sources right 80%).   5. Wrong answers not detected at runtime.</text>
+  <text x="44" y="2322" font-size="11.5" fill="#333">6. Nothing alerts on a stopped worker or model service.   7. No token refresh or revocation.   8. No browser-level automated test.</text>
 </svg>

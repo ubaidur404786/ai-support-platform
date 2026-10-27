@@ -37,4 +37,9 @@ USER app
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers: from v17 every browser request arrives through nginx, so
+# without it the API would see nginx's address for everyone, and the
+# per-address login limit would be one budget for all users. Trusting the
+# X-Forwarded-For header is safe ONLY because the API is not reachable from
+# outside: the one caller that can set it is our own nginx.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="720" viewBox="0 0 1040 720" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+  <rect width="1040" height="720" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v17 — React web app: the product, and the one way in</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: the system was usable only with curl, and nothing in the cluster was reachable from outside.</text>
+  <text x="30" y="74" fill="#1565c0">FIX: frontend/ (Vite + React) served by nginx; nginx proxies /api → api:8000; web is the only NodePort (30080).</text>
+
+  <!-- browser -->
+  <rect x="20" y="96" width="250" height="250" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="32" y="116" font-weight="bold" fill="#222" font-size="12">Browser — frontend/src/</text>
+  <text x="32" y="138" fill="#333" font-size="11">Login.jsx: log in / create account</text>
+  <text x="32" y="156" fill="#333" font-size="11">Documents.jsx: upload .txt .md .pdf</text>
+  <text x="32" y="172" fill="#333" font-size="11">  queued → processing → ready</text>
+  <text x="32" y="188" fill="#333" font-size="11">  (asks again every 2 s until done)</text>
+  <text x="32" y="206" fill="#333" font-size="11">Ask.jsx: question → text appears</text>
+  <text x="32" y="222" fill="#333" font-size="11">  as it is written, then sources</text>
+  <text x="32" y="240" fill="#333" font-size="11">Status.jsx: API / DB / models ok?</text>
+  <text x="32" y="262" fill="#333" font-size="11">api.js: every call goes to /api/…</text>
+  <text x="32" y="278" fill="#333" font-size="11">askStream(): fetch + getReader()</text>
+  <text x="32" y="294" fill="#333" font-size="11">  reads NDJSON line by line</text>
+  <text x="32" y="320" fill="#666" font-size="10">token kept in memory only</text>
+
+  <line x1="270" y1="200" x2="318" y2="200" stroke="#1565c0" stroke-width="1.6" marker-end="url(#arrow-blue)"/>
+  <text x="272" y="190" fill="#1565c0" font-size="10">:30080</text>
+
+  <rect x="320" y="92" width="700" height="290" rx="8" fill="none" stroke="#333" stroke-dasharray="5,4"/>
+  <text x="334" y="112" font-size="12" font-weight="bold" fill="#333" letter-spacing="1">K3S CLUSTER — only "web" is reachable from outside</text>
+
+  <rect x="340" y="126" width="270" height="170" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="352" y="146" font-weight="bold" fill="#222" font-size="12">web · NEW · NodePort 30080 · 74 MB</text>
+  <text x="352" y="166" fill="#333" font-size="11">frontend/Dockerfile: Node builds,</text>
+  <text x="352" y="182" fill="#333" font-size="11">nginx-unprivileged serves dist/</text>
+  <text x="352" y="204" fill="#333" font-size="11">frontend/nginx.conf:</text>
+  <text x="352" y="220" fill="#333" font-size="11">  /api/… → http://api:8000/…</text>
+  <text x="352" y="236" fill="#333" font-size="11">  proxy_buffering off (streaming)</text>
+  <text x="352" y="252" fill="#333" font-size="11">  read timeout 180 s · body 6 MB</text>
+  <text x="352" y="268" fill="#333" font-size="11">  anything else → index.html</text>
+  <text x="352" y="286" fill="#666" font-size="10">same origin for page and API: no CORS</text>
+
+  <line x1="610" y1="200" x2="658" y2="200" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <rect x="660" y="126" width="340" height="110" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="672" y="146" font-weight="bold" fill="#222" font-size="12">api ×3 (ClusterIP, from v16)</text>
+  <text x="672" y="166" fill="#1565c0" font-size="11">uvicorn --proxy-headers: sees the user's</text>
+  <text x="672" y="182" fill="#1565c0" font-size="11">address from X-Forwarded-For, not nginx's</text>
+  <text x="672" y="200" fill="#666" font-size="10">safe only because nothing but our nginx</text>
+  <text x="672" y="214" fill="#666" font-size="10">can reach the API</text>
+
+  <rect x="660" y="250" width="340" height="110" rx="6" fill="#f4f6f8" stroke="#999"/>
+  <text x="672" y="270" fill="#333" font-size="11">unchanged: model-service ×1, embedding-service ×1,</text>
+  <text x="672" y="288" fill="#333" font-size="11">worker ×1, db (StatefulSet), redis, migrate Job</text>
+  <text x="672" y="310" fill="#666" font-size="10">Compose has the same web service on :8080</text>
+  <text x="672" y="326" fill="#666" font-size="10">CI builds support-web with the other images</text>
+
+  <text x="30" y="410" font-size="12" font-weight="bold" fill="#222" letter-spacing="1">MEASURED LOCALLY — k3s in Docker, through http://localhost:30080</text>
+
+  <rect x="20" y="422" width="330" height="130" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="32" y="442" font-weight="bold" fill="#222" font-size="12">Served correctly</text>
+  <text x="32" y="464" fill="#333" font-size="11">GET / → 200 "Support Assistant"</text>
+  <text x="32" y="482" fill="#333" font-size="11">bundle 149 KB (48 KB gzipped)</text>
+  <text x="32" y="500" fill="#333" font-size="11">deep link → 200 (index.html fallback)</text>
+  <text x="32" y="518" fill="#333" font-size="11">web container 11–14 MiB</text>
+
+  <rect x="360" y="422" width="330" height="130" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="372" y="442" font-weight="bold" fill="#222" font-size="12">Streaming survives the proxy</text>
+  <text x="372" y="464" fill="#1565c0" font-size="11">24 text lines spread over 2.4 s</text>
+  <text x="372" y="482" fill="#333" font-size="11">(first 26.7 s, last 29.1 s)</text>
+  <text x="372" y="500" fill="#333" font-size="11">nginx does not hold the stream back</text>
+  <text x="372" y="518" fill="#666" font-size="10">most of the wait is the model reading the prompt</text>
+
+  <rect x="700" y="422" width="320" height="130" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="712" y="442" font-weight="bold" fill="#222" font-size="12">Smoke test through nginx</text>
+  <text x="712" y="464" fill="#333" font-size="11">register + log in 2.06 s</text>
+  <text x="712" y="482" fill="#333" font-size="11">upload → ready 2.38 s</text>
+  <text x="712" y="500" fill="#333" font-size="11">streamed answer 42.8 s (cold model)</text>
+  <text x="712" y="520" fill="#c62828" font-size="11">not clicked through in a real browser yet</text>
+
+  <rect x="20" y="572" width="1000" height="128" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="34" y="594" font-weight="bold" fill="#c62828" font-size="13">NEXT LIMITATION → v18-aws-deploy</text>
+  <text x="34" y="616" fill="#333" font-size="12">• It runs only on this laptop: k3s on one EC2 machine, pulling the images from Docker Hub, with the same k8s/ files (k8s/aws/).</text>
+  <text x="34" y="636" fill="#333" font-size="12">• The images are not on Docker Hub yet: the token has no write access (v15).</text>
+  <text x="34" y="656" fill="#333" font-size="12">• Answers are slow inside this laptop's Docker VM (a cold first answer ~40 s); a refresh logs you out; no browser-level automated test.</text>
+</svg>

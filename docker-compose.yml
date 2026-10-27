@@ -5,7 +5,7 @@
 #   docker compose logs -f api       follow one service's log
 #   docker compose down              stop (the database volume is kept)
 #
-# Only the API is published to your machine.
+# Only the API (and, from v17, the web app) is published to your machine.
 # The database, the model service and the embedding service are on the
 # internal network only: other containers reach them by name (http://model-service:8001),
 # but nothing outside Docker can.
@@ -90,6 +90,8 @@ services:
       <<: *app-settings
       # Read from your .env file (or the shell). Never written in this file.
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+    # Published only for development and the measurement scripts. From v17
+    # the browser uses the web app on :8080, which forwards /api to this.
     ports:
       - "8000:8000"
     depends_on:
@@ -116,6 +118,18 @@ services:
       embedding-service:
         condition: service_healthy
     restart: unless-stopped
+
+  # The React app (v17), served by nginx. The one public entry point:
+  # http://localhost:8080
+  web:
+    build: frontend
+    image: support-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   postgres_data:

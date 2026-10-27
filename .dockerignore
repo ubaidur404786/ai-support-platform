@@ -1,4 +1,4 @@
-# Keep the images small and free of local-only files.
+﻿# Keep the images small and free of local-only files.
 .git
 .venv
 __pycache__
@@ -10,6 +10,7 @@ models/
 tests/
 docs/
 evaluation/
+frontend/node_modules
 # scripts/ is left out, except the one the model-service image runs.
 scripts/*
 !scripts/download_generation_model.py

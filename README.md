@@ -291,6 +291,11 @@ the model file and its metrics are produced at training time.
 | Vector search | pgvector 0.8.6: `vector(384)` column, HNSW index (cosine), `pgvector` Python package | 10.5 s → 147 ms at 50,000 chunks; vectors, text and tenant filter in one query, no second datastore — see [ADR-025](docs/adr/ADR-025-pgvector-hnsw-index.md) (v8's exact baseline: [ADR-024](docs/adr/ADR-024-brute-force-vector-search-in-numpy.md)) and [ADR-026](docs/adr/ADR-026-build-pgvector-into-the-alpine-image.md) |
 | Generation | `llama-cpp-python` (llama.cpp) running Qwen2.5-1.5B-Instruct, 4-bit GGUF, on the CPU | Local and free, one package and one file; releases the GIL — see [ADR-027](docs/adr/ADR-027-local-rag-with-llama-cpp.md) |
 | Model serving | A second FastAPI app (`app/model_service/`), one process, called by the API with `httpx`; a queue limit of 4 | One copy of the model for all API processes (API 2,380 → 981 MB); fast 503 instead of an unbounded wait — see [ADR-031](docs/adr/ADR-031-separate-model-service.md) and [ADR-032](docs/adr/ADR-032-bounded-model-queue.md) |
+| Embedding serving | A third FastAPI app (`app/embedding_service/`), called by the API and the worker | One copy of the embedding model, loaded at start-up (first search 20.9 s → 0.38 s) — see [ADR-033](docs/adr/ADR-033-separate-embedding-service.md) |
+| Containers | One Docker image per service; Docker Compose locally | Repeatable start-up in dependency order, restarts on crash — see [ADR-034](docs/adr/ADR-034-one-image-per-service.md) |
+| CI/CD | GitHub Actions; Docker Hub | Tests every push; images only from tested commits on `main` — see [ADR-036](docs/adr/ADR-036-ci-and-docker-hub.md) |
+| Orchestration | Kubernetes (k3s), plain YAML + Kustomize; Redis for shared rate limits | API ×3 with readiness probes; limits correct across copies — see [ADR-037](docs/adr/ADR-037-kubernetes-plain-manifests.md), [ADR-038](docs/adr/ADR-038-shared-rate-limits-in-redis.md) |
+| Web app | React + Vite (plain JavaScript), served by nginx | The product UI and the only public entry point — see [ADR-039](docs/adr/ADR-039-react-web-app-behind-nginx.md) |
 | Tests | pytest, httpx | API tests against a real database, plus business-logic tests with no HTTP and no model |
 | Container | Docker, Docker Compose | Reproducible runtime; PostgreSQL with one command |
 
@@ -299,10 +304,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v16 — Kubernetes.** See
-[docs/versions/v16-kubernetes.md](docs/versions/v16-kubernetes.md) for the full
+**v17 — React web app.** See
+[docs/versions/v17-react-frontend.md](docs/versions/v17-react-frontend.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v16-kubernetes/README.md](docs/versions/v16-kubernetes/README.md) for
+[docs/versions/v17-react-frontend/README.md](docs/versions/v17-react-frontend/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -326,6 +331,8 @@ a short guide.
 | v14 | `v14-containers` | Five processes started by hand in four terminals, nothing restarted a crash, and the Dockerfile was still v0's; now one image per service and `docker compose up` | Complete |
 | v15 | `v15-ci-docker-hub` | Images were built by hand and nothing tied them to passing tests; now GitHub Actions tests every push and publishes images from `main` (first push refused: read-only token) | Complete |
 | v16 | `v16-kubernetes` | Compose ran one API container, a single point of failure; on Kubernetes the API runs ×3, and the per-process rate limits let 30 of 30 logins through a limit of 10 (10 of 30 once shared in Redis) | Complete |
+| v17 | `v17-react-frontend` | Usable only with curl, and nothing in the cluster reachable from outside; now a React app behind nginx is the one public entry point, with streamed answers | Complete |
+| v18 | `v18-aws-deploy` | Runs only on this laptop: k3s on one EC2 machine, pulling the images from Docker Hub, with the same `k8s/` files | Next |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and
@@ -334,15 +341,14 @@ authentication did not. Old branches remain on GitHub as engineering history.
 The whole chain in one picture — the problem that forced each version, what changed, and what was
 measured afterwards:
 
-![Architecture evolution, v0 to v12](docs/architecture/evolution.svg)
+![Architecture evolution, v0 to v17](docs/architecture/evolution.svg)
 
 Carried forward, measured but not yet fixed: `total` still costs more than the page it
 accompanies (5.78 ms vs 0.128 ms); deep offsets degrade linearly; there is no type checker;
-rate-limit buckets live in one process, so every extra worker multiplies the limits; semantic
+answers are 2–6 times slower inside the laptop's Docker VM than as a Windows process; semantic
 retrieval misses the right article for 20% of answerable questions (paraphrases; hybrid
 retrieval did not help); answers take ~7 s, mostly reading the prompt, one at a time on one CPU
-(5–10 a minute; beyond 4 waiting, callers are told "busy"); the API's `/health` does not check
-the model service; wrong answers are not detected at runtime; embedding is slow on a CPU; nothing alerts anyone when
+(5–10 a minute; beyond 4 waiting, callers are told "busy"); wrong answers are not detected at runtime; embedding is slow on a CPU; nothing alerts anyone when
 the document worker stops.
 
 ## 11. How to Run
@@ -363,6 +369,13 @@ docker compose ps
 ```bash
 python scripts/smoke_test.py http://localhost:8000
 ```
+
+Open the web app at http://localhost:8080 (since v17).
+
+### On Kubernetes (since v16)
+
+See [k8s/README.md](k8s/README.md): a one-node k3s cluster inside Docker, the same files as on
+AWS. The web app is then at http://localhost:30080.
 
 ### As local processes (for development)
 
@@ -680,6 +693,13 @@ which is where hybrid retrieval should help.
 - [ADR-030 — Stream answers as NDJSON: sources at once, then the text](docs/adr/ADR-030-stream-answers-as-ndjson.md)
 - [ADR-031 — Run the answer model in its own process, called over HTTP](docs/adr/ADR-031-separate-model-service.md)
 - [ADR-032 — Bound the model's queue and refuse early with 503 + Retry-After](docs/adr/ADR-032-bounded-model-queue.md)
+- [ADR-033 — Run the embedding model in its own service](docs/adr/ADR-033-separate-embedding-service.md)
+- [ADR-034 — One Docker image per service, with the models built in](docs/adr/ADR-034-one-image-per-service.md)
+- [ADR-035 — One public entry point; everything else internal](docs/adr/ADR-035-one-public-entry-point.md)
+- [ADR-036 — GitHub Actions tests every push and publishes images to Docker Hub](docs/adr/ADR-036-ci-and-docker-hub.md)
+- [ADR-037 — Plain Kubernetes files on k3s, locally and on AWS](docs/adr/ADR-037-kubernetes-plain-manifests.md)
+- [ADR-038 — Rate-limit counters shared in Redis, failing open](docs/adr/ADR-038-shared-rate-limits-in-redis.md)
+- [ADR-039 — A React app served by nginx, which proxies /api](docs/adr/ADR-039-react-web-app-behind-nginx.md)
 
 ## 15. Performance / Scaling Notes
 

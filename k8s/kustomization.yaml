@@ -11,3 +11,4 @@ resources:
   - migrate.yaml
   - model-services.yaml
   - api.yaml
+  - web.yaml

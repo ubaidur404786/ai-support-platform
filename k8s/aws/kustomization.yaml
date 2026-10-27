@@ -1,0 +1,25 @@
+# The same Kubernetes files, with images pulled from Docker Hub (v18).
+#
+#   kubectl apply -k k8s/aws
+#
+# Replace YOUR_DOCKERHUB_USER with your Docker Hub user name. "latest" is the
+# tag CI pushes from main; use a commit id instead to pin an exact version.
+resources:
+  - ../
+
+images:
+  - name: support-api
+    newName: docker.io/YOUR_DOCKERHUB_USER/support-api
+    newTag: latest
+  - name: support-embedding
+    newName: docker.io/YOUR_DOCKERHUB_USER/support-embedding
+    newTag: latest
+  - name: support-model
+    newName: docker.io/YOUR_DOCKERHUB_USER/support-model
+    newTag: latest
+  - name: support-db
+    newName: docker.io/YOUR_DOCKERHUB_USER/support-db
+    newTag: latest
+  - name: support-web
+    newName: docker.io/YOUR_DOCKERHUB_USER/support-web
+    newTag: latest

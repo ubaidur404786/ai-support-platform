@@ -70,6 +70,9 @@ jobs:
           - image: support-db
             dockerfile: docker/postgres/Dockerfile
             context: docker/postgres
+          - image: support-web
+            dockerfile: frontend/Dockerfile
+            context: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
