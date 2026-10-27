@@ -1,0 +1,25 @@
+# Runs the database migrations once (alembic upgrade head), then stops.
+#
+# A Job, not part of the API Deployment: with 3 API copies starting at the
+# same moment, 3 copies would try to change the schema at once.
+#
+# To run it again after an update:
+#   kubectl delete job migrate && kubectl apply -k k8s
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+spec:
+  # Retry a few times: on a fresh cluster the database may still be starting.
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: support-api
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef: { name: app-settings }
+            - secretRef: { name: app-secrets }

@@ -18,3 +18,4 @@ email-validator
 python-multipart
 pypdf
 pgvector
+redis

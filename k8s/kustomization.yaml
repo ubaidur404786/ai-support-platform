@@ -1,0 +1,13 @@
+# Lists every file, so the whole system starts with one command:
+#   kubectl apply -k k8s
+#
+# The "images" section is how one set of files serves both places:
+# - on the laptop (k3s in Docker) the local image names are used as they are;
+# - for AWS, k8s/aws/kustomization.yaml replaces them with Docker Hub names.
+resources:
+  - config.yaml
+  - db.yaml
+  - redis.yaml
+  - migrate.yaml
+  - model-services.yaml
+  - api.yaml

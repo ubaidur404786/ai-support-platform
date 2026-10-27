@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Support Platform"
-    app_version: str = "0.15.0"
+    app_version: str = "0.16.0"
     classifier_path: str = "models/ticket_classifier.joblib"
 
     # Predictions below this confidence are flagged for a human to review.
@@ -154,6 +154,11 @@ class Settings(BaseSettings):
     model_max_queue: int = 4
     # What a "busy" 503 tells the client: try again after this many seconds.
     model_busy_retry_after_seconds: int = 10
+    # Where rate-limit counters live (v16). Empty = in this process's memory,
+    # fine for one process. With several API copies (Kubernetes runs 3) each
+    # copy would count separately and allow 3x the limit, so they share Redis:
+    # redis://redis:6379/0
+    redis_url: str = ""
     # POST /answers per user. Its own budget: one answer costs seconds of CPU,
     # about a thousand times a /classify call.
     answer_rate_limit_per_minute: int = 10

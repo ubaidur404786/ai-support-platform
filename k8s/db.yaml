@@ -1,0 +1,64 @@
+# PostgreSQL with pgvector: ONE copy, with its own disk.
+#
+# A StatefulSet instead of a Deployment: it keeps the same name (db-0) and the
+# same disk across restarts. A database must not be scaled like the API -
+# two copies writing to the same files would corrupt them.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels: { app: db }
+  template:
+    metadata:
+      labels: { app: db }
+    spec:
+      containers:
+        - name: postgres
+          image: support-db
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: POSTGRES_USER, value: support }
+            - { name: POSTGRES_DB, value: support_platform }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD }
+            # PostgreSQL refuses a data folder that is not empty; a new disk
+            # can contain a "lost+found" folder, so use a subfolder.
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "support", "-d", "support_platform"]
+            periodSeconds: 5
+          resources:
+            requests: { memory: 128Mi, cpu: 100m }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  # Kubernetes creates a disk (PersistentVolumeClaim) for the database. It
+  # survives the pod being deleted and recreated.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+# Internal only (ClusterIP is the default type): reachable as db:5432 from
+# inside the cluster, not from your machine or the internet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+spec:
+  selector: { app: db }
+  ports:
+    - port: 5432

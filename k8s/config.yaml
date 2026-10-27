@@ -1,0 +1,15 @@
+# Settings shared by the API, the worker and the migration job.
+#
+# A ConfigMap holds plain settings. Passwords and keys go in a Secret instead
+# (see secret.example.yaml), so they can be managed and protected separately.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-settings
+data:
+  # Services find each other by their Service name: Kubernetes runs a small
+  # DNS server, so "db" resolves to the database's internal address.
+  MODEL_SERVICE_URL: http://model-service:8001
+  EMBEDDING_SERVICE_URL: http://embedding-service:8002
+  REDIS_URL: redis://redis:6379/0
+  LOG_LEVEL: INFO

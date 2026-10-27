@@ -299,10 +299,10 @@ pinned set used for installs and the Docker build.
 
 ## 9. Current Version
 
-**v15 — CI and Docker Hub.** See
-[docs/versions/v15-ci-docker-hub.md](docs/versions/v15-ci-docker-hub.md) for the full
+**v16 — Kubernetes.** See
+[docs/versions/v16-kubernetes.md](docs/versions/v16-kubernetes.md) for the full
 problem / solution / trade-off / measurement write-up, and
-[docs/versions/v15-ci-docker-hub/README.md](docs/versions/v15-ci-docker-hub/README.md) for
+[docs/versions/v16-kubernetes/README.md](docs/versions/v16-kubernetes/README.md) for
 a short guide.
 
 ## 10. Version Evolution
@@ -325,6 +325,7 @@ a short guide.
 | v13 | `v13-embedding-service` | The API and the worker each loaded the same embedding model; the first semantic search after an API restart took 20.9 s (0.38 s after: the model loads once, in its own service) | Complete |
 | v14 | `v14-containers` | Five processes started by hand in four terminals, nothing restarted a crash, and the Dockerfile was still v0's; now one image per service and `docker compose up` | Complete |
 | v15 | `v15-ci-docker-hub` | Images were built by hand and nothing tied them to passing tests; now GitHub Actions tests every push and publishes images from `main` (first push refused: read-only token) | Complete |
+| v16 | `v16-kubernetes` | Compose ran one API container, a single point of failure; on Kubernetes the API runs ×3, and the per-process rate limits let 30 of 30 logins through a limit of 10 (10 of 30 once shared in Redis) | Complete |
 
 Only v3 diverged from the original roadmap, which had scheduled authentication there.
 Measurement inserted pagination first, because the unbounded list had a measured trigger and

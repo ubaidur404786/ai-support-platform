@@ -14,6 +14,9 @@ x-app-settings: &app-settings
   DATABASE_URL: postgresql+psycopg://support:support@db:5432/support_platform
   MODEL_SERVICE_URL: http://model-service:8001
   EMBEDDING_SERVICE_URL: http://embedding-service:8002
+  # Shared rate-limit counters (v16). Harmless with one API container, and the
+  # same setting Kubernetes uses with three.
+  REDIS_URL: redis://redis:6379/0
   LOG_LEVEL: INFO
 
 services:
@@ -76,6 +79,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
 
   api:
     image: support-api

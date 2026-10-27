@@ -1,0 +1,103 @@
+# The two model services. Both are internal (ClusterIP): only the API and the
+# worker call them, never a browser.
+
+# The answer model: exactly ONE copy. Every copy would hold its own 1.1 GB
+# model and its own queue (v12), and one CPU writes 5-10 answers a minute
+# no matter how many copies share it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: model-service }
+  template:
+    metadata:
+      labels: { app: model-service }
+    spec:
+      containers:
+        - name: model-service
+          image: support-model
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+          # Not ready until the model is loaded: Kubernetes sends no traffic
+          # before that. /health answers "degraded" while the model is missing,
+          # so check the model_loaded flag, not just "did it answer".
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import json, urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8001/health'))['model_loaded']"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          # Is the process alive at all? A failing liveness probe restarts it.
+          # Generous, because one answer can keep the CPU busy for many seconds.
+          livenessProbe:
+            httpGet: { path: /health, port: 8001 }
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests: { memory: 1500Mi, cpu: 500m }
+            limits: { memory: 2500Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-service
+spec:
+  selector: { app: model-service }
+  ports:
+    - port: 8001
+---
+# The embedding model. It keeps no state, so it could run as several copies;
+# one is enough for a laptop.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: embedding-service }
+  template:
+    metadata:
+      labels: { app: embedding-service }
+    spec:
+      containers:
+        - name: embedding-service
+          image: support-embedding
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8002
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import json, urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8002/health'))['model_loaded']"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8002 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 10
+          resources:
+            requests: { memory: 300Mi, cpu: 200m }
+            limits: { memory: 800Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-service
+spec:
+  selector: { app: embedding-service }
+  ports:
+    - port: 8002

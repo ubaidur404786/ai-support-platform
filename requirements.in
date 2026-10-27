@@ -36,3 +36,6 @@ pgvector>=0.4             # Lets SQLAlchemy read and write PostgreSQL vector col
 # --- Generated answers --------------------------------------------------
 # Install with: pip install -r requirements.txt (it adds the index of prebuilt CPU wheels).
 llama-cpp-python>=0.3    # Runs a small local language model (GGUF file) on the CPU with llama.cpp
+
+# --- Shared state across API copies (v16) -----------------------------------
+redis>=5.0               # Client for Redis: rate-limit counters shared by every API copy

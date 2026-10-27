@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="780" viewBox="0 0 1040 780" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+  <rect width="1040" height="780" fill="#ffffff"/>
+
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#222">v16 — Kubernetes: 3 API copies, 1 model copy, rate limits shared in Redis</text>
+  <text x="30" y="56" fill="#c62828">PROBLEM: Compose runs one API container (a single point of failure), with no routing to ready copies and no rolling update.</text>
+  <text x="30" y="74" fill="#1565c0">FIX: k8s/*.yaml on k3s — Deployments + Services + probes; API ×3; counters in Redis, because 3 in-memory limiters let 3× the limit through.</text>
+
+  <rect x="20" y="92" width="1000" height="400" rx="8" fill="none" stroke="#1565c0" stroke-dasharray="5,4"/>
+  <text x="34" y="112" font-size="12" font-weight="bold" fill="#1565c0" letter-spacing="1">K3S CLUSTER (one node, inside Docker on the laptop · same distribution as on AWS in v18) — every Service is ClusterIP = internal</text>
+
+  <!-- api service -->
+  <rect x="40" y="130" width="200" height="56" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="52" y="150" font-weight="bold" fill="#222" font-size="12">Service api:8000</text>
+  <text x="52" y="168" fill="#333" font-size="11">spreads requests over ready pods</text>
+
+  <rect x="40" y="206" width="200" height="40" rx="6" fill="#f4f6f8" stroke="#333"/>
+  <text x="52" y="231" fill="#222" font-size="12">api pod 1 · readiness /health</text>
+  <rect x="40" y="252" width="200" height="40" rx="6" fill="#f4f6f8" stroke="#333"/>
+  <text x="52" y="277" fill="#222" font-size="12">api pod 2</text>
+  <rect x="40" y="298" width="200" height="40" rx="6" fill="#f4f6f8" stroke="#333"/>
+  <text x="52" y="323" fill="#222" font-size="12">api pod 3</text>
+  <text x="40" y="358" fill="#666" font-size="10">Deployment api, replicas: 3 (api.yaml)</text>
+  <text x="40" y="372" fill="#666" font-size="10">kubectl scale deployment api --replicas=5</text>
+  <line x1="140" y1="186" x2="140" y2="204" stroke="#1565c0" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+
+  <!-- redis -->
+  <rect x="290" y="206" width="210" height="86" rx="6" fill="#e8f0fe" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="302" y="226" font-weight="bold" fill="#222" font-size="12">redis:6379 · NEW</text>
+  <text x="302" y="244" fill="#333" font-size="11">INCR ratelimit:auth:&lt;ip&gt;:&lt;minute&gt;</text>
+  <text x="302" y="260" fill="#333" font-size="11">EXPIRE 60 · &gt; limit → 429</text>
+  <text x="302" y="278" fill="#666" font-size="10">down → allow + warning (fail open)</text>
+  <line x1="240" y1="270" x2="288" y2="250" stroke="#1565c0" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+
+  <!-- models -->
+  <rect x="550" y="130" width="220" height="86" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="562" y="150" font-weight="bold" fill="#222" font-size="12">model-service:8001 · ×1</text>
+  <text x="562" y="168" fill="#333" font-size="11">ready only when model_loaded</text>
+  <text x="562" y="184" fill="#333" font-size="11">memory request 1.5 Gi, limit 2.5 Gi</text>
+  <text x="562" y="202" fill="#666" font-size="10">more copies = more 1.1 GB models (v12)</text>
+
+  <rect x="550" y="230" width="220" height="70" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="562" y="250" font-weight="bold" fill="#222" font-size="12">embedding-service:8002 · ×1</text>
+  <text x="562" y="268" fill="#333" font-size="11">stateless: could be scaled</text>
+  <text x="562" y="284" fill="#666" font-size="10">ready only when model_loaded</text>
+
+  <rect x="550" y="316" width="220" height="70" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="562" y="336" font-weight="bold" fill="#222" font-size="12">worker · ×1</text>
+  <text x="562" y="354" fill="#333" font-size="11">same image as api</text>
+  <text x="562" y="370" fill="#333" font-size="11">python -m app.worker</text>
+
+  <line x1="240" y1="226" x2="548" y2="170" stroke="#333" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="240" y1="240" x2="548" y2="262" stroke="#333" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+  <!-- db -->
+  <rect x="820" y="130" width="180" height="100" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="832" y="150" font-weight="bold" fill="#222" font-size="12">db:5432</text>
+  <text x="832" y="168" fill="#333" font-size="11">StatefulSet · ×1 only</text>
+  <text x="832" y="184" fill="#333" font-size="11">2 Gi disk (PVC) kept</text>
+  <text x="832" y="200" fill="#333" font-size="11">across pod restarts</text>
+
+  <rect x="820" y="246" width="180" height="70" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="832" y="266" font-weight="bold" fill="#222" font-size="12">migrate · Job</text>
+  <text x="832" y="284" fill="#333" font-size="11">alembic upgrade head</text>
+  <text x="832" y="300" fill="#666" font-size="10">once, not by 3 API copies</text>
+
+  <rect x="820" y="332" width="180" height="70" rx="6" fill="#f4f6f8" stroke="#333" stroke-width="1.5"/>
+  <text x="832" y="352" font-weight="bold" fill="#222" font-size="12">ConfigMap + Secret</text>
+  <text x="832" y="370" fill="#333" font-size="11">app-settings · app-secrets</text>
+  <text x="832" y="386" fill="#666" font-size="10">Secret never in Git</text>
+
+  <rect x="290" y="400" width="480" height="76" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="302" y="420" font-weight="bold" fill="#222" font-size="12">How a request finds its way</text>
+  <text x="302" y="438" fill="#333" font-size="11">http://api:8000 → cluster DNS → Service → one READY api pod</text>
+  <text x="302" y="454" fill="#333" font-size="11">api pod → http://model-service:8001 / http://embedding-service:8002 / db:5432</text>
+  <text x="302" y="470" fill="#666" font-size="10">a pod that fails readiness gets no traffic; a dead one is replaced</text>
+
+  <!-- measurements -->
+  <text x="30" y="518" font-size="12" font-weight="bold" fill="#222" letter-spacing="1">MEASURED LOCALLY — k3s v1.31.4 in Docker Desktop (4 GB VM), CPU laptop</text>
+
+  <rect x="20" y="530" width="380" height="110" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="32" y="550" font-weight="bold" fill="#222" font-size="12">3 API copies · login limit 10/min · 30 attempts</text>
+  <text x="32" y="572" fill="#c62828" font-size="11">counters in each copy's memory: 30 let through, 0 refused</text>
+  <text x="32" y="592" fill="#1565c0" font-size="11">counters in Redis: 10 let through, 20 refused (429)</text>
+  <text x="32" y="614" fill="#666" font-size="10">v5 predicted it (2 workers, limit 5 → 8); here 3 copies → exactly 3×</text>
+
+  <rect x="410" y="530" width="300" height="110" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="422" y="550" font-weight="bold" fill="#222" font-size="12">Losing a copy</text>
+  <text x="422" y="572" fill="#333" font-size="11">deleted 1 api pod during traffic:</text>
+  <text x="422" y="592" fill="#1565c0" font-size="11">40 of 40 /health calls succeeded</text>
+  <text x="422" y="614" fill="#333" font-size="11">replacement pod running in ~20 s</text>
+
+  <rect x="720" y="530" width="300" height="110" rx="6" fill="#ffffff" stroke="#999"/>
+  <text x="732" y="550" font-weight="bold" fill="#222" font-size="12">End to end (smoke test)</text>
+  <text x="732" y="572" fill="#333" font-size="11">/health 0.14 s · upload → ready 2.38 s</text>
+  <text x="732" y="592" fill="#333" font-size="11">answer 42.8 s (cold model, inside the VM)</text>
+  <text x="732" y="614" fill="#333" font-size="11">whole cluster: 2.26 GiB memory</text>
+
+  <rect x="20" y="658" width="1000" height="104" rx="6" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+  <text x="34" y="680" font-weight="bold" fill="#c62828" font-size="13">NEXT LIMITATION → v17-react-frontend</text>
+  <text x="34" y="702" fill="#333" font-size="12">• Nobody can use the product without curl or kubectl: there is no user interface, and nothing in the cluster is reachable from outside.</text>
+  <text x="34" y="722" fill="#333" font-size="12">• The images are copied into the cluster by hand (docker save | ctr import): the Docker Hub token has no write scope yet (v15).</text>
+  <text x="34" y="742" fill="#333" font-size="12">• Docker Desktop's built-in Kubernetes never started on this 8 GB laptop; k3s in a container did, in under 40 s.</text>
+</svg>

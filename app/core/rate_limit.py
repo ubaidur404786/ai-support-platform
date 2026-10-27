@@ -14,10 +14,12 @@ caller in a loop is held to the refill rate, which is what abuse looks like.
 
 This limiter lives in the memory of ONE process. With several uvicorn workers,
 each has its own buckets, so the real limit is workers x the configured limit.
-That is the trigger for moving the counters into a shared store such as Redis -
-not needed while the platform runs as a single process.
+That is the trigger for moving the counters into a shared store such as Redis.
+It fired in v16, when Kubernetes started running several API copies:
+RedisRateLimiter below is used whenever REDIS_URL is set.
 """
 
+import logging
 import math
 import threading
 import time
@@ -25,6 +27,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from fastapi import HTTPException, Request, status
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,6 +95,46 @@ class RateLimiter:
             return (1 - bucket.tokens) / self._refill_per_second
 
 
+class RedisRateLimiter:
+    """The same budget, counted in Redis so every API copy shares it (v16).
+
+    Measured in v5: with 2 processes and a limit of 5, 8 requests got through,
+    because each process kept its own buckets. In Kubernetes the API runs as 3
+    copies, so the in-memory limiter would allow up to 3x the limit.
+
+    This uses a simpler algorithm than the token bucket: a counter per caller
+    per minute. INCR adds 1 and returns the new value in one step, so two API
+    copies can never both read "4" and both let a 5th request through.
+    The trade-off: a caller can send `limit` requests at the end of one minute
+    and `limit` more at the start of the next.
+    """
+
+    def __init__(self, redis_client, name: str, limit: int, clock: Callable[[], float] = time.time) -> None:
+        self._redis = redis_client
+        self._name = name
+        self._limit = limit
+        self._clock = clock
+
+    def acquire(self, key: str) -> float:
+        now = self._clock()
+        minute = int(now // 60)
+        counter = f"ratelimit:{self._name}:{key}:{minute}"
+        try:
+            count = self._redis.incr(counter)
+            if count == 1:
+                # Redis deletes the counter by itself once the minute is over.
+                self._redis.expire(counter, 60)
+        except Exception:
+            # Redis is down: let the request through rather than refuse
+            # everyone. The limit protects the service; it should not be the
+            # thing that takes it down. The log line makes the gap visible.
+            logger.warning("Rate limit store unavailable; request allowed", exc_info=True)
+            return 0.0
+        if count <= self._limit:
+            return 0.0
+        return (minute + 1) * 60 - now  # seconds until the next minute
+
+
 def per_minute(requests_per_minute: int) -> RateLimiter:
     """A bucket that holds one minute's allowance and refills over one minute."""
     return RateLimiter(
@@ -105,7 +149,7 @@ def enforce(request: Request, name: str, key: str) -> None:
     including each one a test builds - starts with empty buckets. A missing
     limiter means limits are switched off in configuration.
     """
-    limiter: RateLimiter | None = request.app.state.rate_limiters.get(name)
+    limiter: RateLimiter | RedisRateLimiter | None = request.app.state.rate_limiters.get(name)
     if limiter is None:
         return
 
