@@ -22,11 +22,17 @@ It is built as separate services (web app, API, worker, two model services), eac
 2. **Upload a help article** (`.txt`, `.md` or `.pdf`). Its status changes from `queued` to `ready` in a few seconds.
 3. **Ask a question.** The answer appears word by word, with the sources it used.
 
-<!-- Screenshots: add the images to docs/images/ and remove the comment markers.
+**1. Log in.** The line at the bottom shows that every part of the system is running.
+
 ![Log in](docs/images/1-login.png)
+
+**2. Upload a help article** from the "Knowledge base" box.
+
 ![Upload a document](docs/images/2-upload.png)
+
+**3. Ask a question.** The answer is written only from your articles, and the source is shown below it.
+
 ![Ask a question](docs/images/3-answer.png)
--->
 
 Example (with `evaluation/knowledge_base/refund-policy.md` uploaded):
 
