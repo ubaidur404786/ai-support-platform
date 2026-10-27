@@ -82,7 +82,9 @@ The same images run on Kubernetes (k3s). The files are in [k8s/](k8s/README.md);
 kubectl apply -k k8s
 ```
 
-**How the parts find and talk to each other inside the cluster:**
+![How the parts talk to each other on Kubernetes](docs/architecture/kubernetes.svg)
+
+**What each Kubernetes object is used for:**
 
 | Kubernetes object | Used for | Why |
 |---|---|---|
