@@ -1,0 +1,110 @@
+# Run the platform from the ready-made images on Docker Hub.
+# No code, no build: this one file is all you need.
+#
+#   curl -O https://raw.githubusercontent.com/ubaidur404786/ai-support-platform/main/docker-compose.hub.yml
+#   JWT_SECRET_KEY=$(openssl rand -hex 32) docker compose -f docker-compose.hub.yml up -d
+#
+# Then open http://localhost:8080. The first start downloads the images
+# (about 4.5 GB on disk; the two AI models are inside them).
+#
+# Stop:  docker compose -f docker-compose.hub.yml down
+#
+# Only the web app (8080) is reachable from your machine; everything else
+# talks on Docker's internal network.
+
+x-app-settings: &app-settings
+  DATABASE_URL: postgresql+psycopg://support:support@db:5432/support_platform
+  MODEL_SERVICE_URL: http://model-service:8001
+  EMBEDDING_SERVICE_URL: http://embedding-service:8002
+  REDIS_URL: redis://redis:6379/0
+  LOG_LEVEL: INFO
+
+services:
+  db:
+    image: ubaidur404786/support-db:latest
+    environment:
+      POSTGRES_USER: support
+      POSTGRES_PASSWORD: support
+      POSTGRES_DB: support_platform
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U support -d support_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Creates the database tables once, then exits.
+  migrate:
+    image: ubaidur404786/support-api:latest
+    command: ["alembic", "upgrade", "head"]
+    environment: *app-settings
+    depends_on:
+      db:
+        condition: service_healthy
+
+  embedding-service:
+    image: ubaidur404786/support-embedding:latest
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  model-service:
+    image: ubaidur404786/support-model:latest
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+
+  api:
+    image: ubaidur404786/support-api:latest
+    environment:
+      <<: *app-settings
+      # Comes from your shell or a .env file next to this one; never written here.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY first}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      embedding-service:
+        condition: service_healthy
+      model-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  worker:
+    image: ubaidur404786/support-api:latest
+    command: ["python", "-m", "app.worker"]
+    environment: *app-settings
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      embedding-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: ubaidur404786/support-web:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
