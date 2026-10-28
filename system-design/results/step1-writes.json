@@ -1,0 +1,62 @@
+{
+  "label": "step1-writes",
+  "method": "POST",
+  "path": "/api/tickets",
+  "rows": [
+    {
+      "users": 1,
+      "rps": 15.8,
+      "p50": 27.9,
+      "p95": 43.4,
+      "p99": 78.4,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 158
+      }
+    },
+    {
+      "users": 10,
+      "rps": 77.9,
+      "p50": 100.9,
+      "p95": 270.4,
+      "p99": 349.4,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 779
+      }
+    },
+    {
+      "users": 50,
+      "rps": 58.1,
+      "p50": 685.4,
+      "p95": 2251.1,
+      "p99": 2948.5,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 581
+      }
+    },
+    {
+      "users": 100,
+      "rps": 63.5,
+      "p50": 1223.5,
+      "p95": 4375.3,
+      "p99": 7745.8,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 635
+      }
+    },
+    {
+      "users": 200,
+      "rps": 63.6,
+      "p50": 2835.4,
+      "p95": 9295.1,
+      "p99": 11624.0,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 636
+      }
+    }
+  ]
+}

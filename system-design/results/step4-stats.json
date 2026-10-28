@@ -1,0 +1,63 @@
+{
+  "label": "step4-stats",
+  "method": "GET",
+  "path": "/api/tickets/stats",
+  "rows": [
+    {
+      "users": 1,
+      "rps": 7.8,
+      "p50": 107.3,
+      "p95": 165.3,
+      "p99": 1003.0,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 78
+      }
+    },
+    {
+      "users": 10,
+      "rps": 12.6,
+      "p50": 733.6,
+      "p95": 1259.7,
+      "p99": 1568.5,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 126
+      }
+    },
+    {
+      "users": 50,
+      "rps": 17.7,
+      "p50": 3394.3,
+      "p95": 4512.0,
+      "p99": 5013.6,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 177
+      }
+    },
+    {
+      "users": 100,
+      "rps": 21.3,
+      "p50": 6524.7,
+      "p95": 8120.9,
+      "p99": 8616.3,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 213
+      }
+    },
+    {
+      "users": 200,
+      "rps": 33.4,
+      "p50": 10020.0,
+      "p95": 13658.2,
+      "p99": 14090.1,
+      "errors": 149,
+      "gateways": {
+        "gateway1": 185,
+        "?": 149
+      }
+    }
+  ]
+}

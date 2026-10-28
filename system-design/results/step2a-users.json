@@ -1,0 +1,72 @@
+{
+  "label": "step2a-users",
+  "method": "GET",
+  "path": "/api/users",
+  "rows": [
+    {
+      "users": 1,
+      "rps": 1.4,
+      "p50": 23.7,
+      "p95": 8925.2,
+      "p99": 8925.2,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 5,
+        "gateway2": 5,
+        "gateway3": 4
+      }
+    },
+    {
+      "users": 10,
+      "rps": 153.8,
+      "p50": 50.4,
+      "p95": 93.8,
+      "p99": 440.8,
+      "errors": 0,
+      "gateways": {
+        "gateway3": 513,
+        "gateway1": 513,
+        "gateway2": 512
+      }
+    },
+    {
+      "users": 50,
+      "rps": 173.4,
+      "p50": 252.1,
+      "p95": 408.6,
+      "p99": 511.7,
+      "errors": 0,
+      "gateways": {
+        "gateway3": 578,
+        "gateway1": 578,
+        "gateway2": 578
+      }
+    },
+    {
+      "users": 100,
+      "rps": 165.7,
+      "p50": 430.3,
+      "p95": 1692.6,
+      "p99": 2598.5,
+      "errors": 0,
+      "gateways": {
+        "gateway3": 552,
+        "gateway1": 552,
+        "gateway2": 553
+      }
+    },
+    {
+      "users": 200,
+      "rps": 155.6,
+      "p50": 906.8,
+      "p95": 4995.6,
+      "p99": 7538.6,
+      "errors": 0,
+      "gateways": {
+        "gateway3": 519,
+        "gateway2": 518,
+        "gateway1": 519
+      }
+    }
+  ]
+}

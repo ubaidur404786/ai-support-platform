@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300" font-family="Arial, Helvetica, sans-serif" font-size="12">
+<rect width="720" height="300" fill="#fcfcfb"/>
+<text x="16" y="28" font-size="16" font-weight="bold" fill="#0b0b0b">Database steps at 50 users</text>
+<text x="16" y="48" fill="#52514e">Requests per second. Same laptop, same session; each database container has 1 CPU.</text>
+<text x="220" y="89" text-anchor="end" fill="#0b0b0b">stats read, 1 database</text>
+<rect x="230" y="70" width="83.9" height="28" rx="4" fill="#2a78d6"/>
+<text x="321.9" y="89" fill="#0b0b0b">13.1 req/s</text>
+<text x="220" y="135" text-anchor="end" fill="#0b0b0b">stats read, 2 replicas</text>
+<rect x="230" y="116" width="81.3" height="28" rx="4" fill="#1baf7a"/>
+<text x="319.3" y="135" fill="#0b0b0b">12.7 req/s</text>
+<text x="220" y="181" text-anchor="end" fill="#0b0b0b">stats read, 2 shards</text>
+<rect x="230" y="162" width="113.4" height="28" rx="4" fill="#eda100"/>
+<text x="351.4" y="181" fill="#0b0b0b">17.7 req/s</text>
+<text x="220" y="227" text-anchor="end" fill="#0b0b0b">writes, 1 database</text>
+<rect x="230" y="208" width="372.1" height="28" rx="4" fill="#2a78d6"/>
+<text x="610.1" y="227" fill="#0b0b0b">58.1 req/s</text>
+<text x="220" y="273" text-anchor="end" fill="#0b0b0b">writes, 2 shards</text>
+<rect x="230" y="254" width="391.3" height="28" rx="4" fill="#eda100"/>
+<text x="629.3" y="273" fill="#0b0b0b">61.1 req/s</text>
+</svg>

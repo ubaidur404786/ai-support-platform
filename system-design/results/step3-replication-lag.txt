@@ -1,0 +1,6 @@
+ application_name | client_addr |   state   | write_lag | replay_lag 
+------------------+-------------+-----------+-----------+------------
+ walreceiver      | 172.20.0.5  | streaming |           | 
+ walreceiver      | 172.20.0.4  | streaming |           | 
+(2 rows)
+

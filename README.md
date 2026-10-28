@@ -55,7 +55,7 @@ Example (with `evaluation/knowledge_base/refund-policy.md` uploaded):
 | PostgreSQL | all data, plus vector search | PostgreSQL 17, pgvector |
 | Redis | rate limits shared by the API copies | Redis |
 
-**How it was built:** the project started as one small file (v0) and grew one version at a time. Each version fixed one real problem the version before it had. All 18 versions, their diagrams and the reasons behind each choice are in **[docs/](docs/README.md)**.
+**How it was built:** the project started as one small file (v0) and grew one version at a time. Each version fixed one real problem the version before it had. All 19 versions (v0 to v18), their diagrams and the reasons behind each choice are in **[docs/](docs/README.md)**.
 
 ## Run it (no code needed)
 
@@ -108,9 +108,28 @@ The API runs as **3 pods**. If one is deleted, the other two keep answering: in 
 
 Details: [k8s/README.md](k8s/README.md) and [the v16 write-up](docs/versions/v16-kubernetes.md).
 
+## System design: what to scale, and why
+
+Before moving to the cloud, a small lab in [system-design/](system-design/README.md) measured how latency changes as users grow. It has nginx with a hand-written config, 1 or 3 gateways, services, and PostgreSQL with replicas and shards. Each container gets 1 CPU.
+
+![Scaling results](system-design/architecture/step2-scaling.svg)
+
+- **3 gateways alone:** no gain (26 → 27 req/s at 100 users), because the service behind them was the busy part.
+- **Copying the busy service as well:** 56 req/s, and the median wait fell from 5.6 s to 1.9 s.
+- **Read replicas and shards:** no gain on one laptop, because copies on one machine add no hardware.
+
+What that means for this platform:
+
+![Platform system design](docs/architecture/v18.svg)
+
+- Copy the model service first.
+- Keep the API stateless behind one load balancer.
+- Add one read replica on separate hardware.
+- Do not shard yet. The shard key would be `organization_id`.
+
 ## Next step: AWS
 
-The plan for the next version (v18) is to run the same Kubernetes files on the cloud:
+The plan for v19 is to run the same Kubernetes files on the cloud:
 
 1. One AWS EC2 server (8 GB of memory), with k3s installed.
 2. The cluster pulls the images from Docker Hub. `k8s/aws/` only changes the image names.
@@ -154,5 +173,6 @@ frontend/             the React web app
 docker/               one Dockerfile per service
 k8s/                  Kubernetes files
 tests/                tests, numbered by version
+system-design/        v18 lab: nginx, gateways, replicas, shards, load tests
 docs/                 version history, diagrams, decisions
 ```

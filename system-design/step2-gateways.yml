@@ -1,0 +1,29 @@
+# Step 2a: three gateways, still ONE copy of each service.
+#   docker compose -f docker-compose.yml -f step2-gateways.yml up -d
+#
+# Manual scaling = copy a gateway block, give it a new name, and add that
+# name to nginx's upstream list (nginx/step2.conf).
+
+x-gateway: &gateway
+  image: sd-python
+  pull_policy: never
+  restart: unless-stopped
+  cpus: 1.0
+  command: ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]
+  environment:
+    USERS_SERVICE_URL: http://users-service:8001
+    TICKETS_SERVICE_URL: http://tickets-service:8002
+
+services:
+  gateway2:
+    <<: *gateway
+    hostname: gateway2
+
+  gateway3:
+    <<: *gateway
+    hostname: gateway3
+
+  nginx:
+    volumes:
+      - ./nginx/step2.conf:/etc/nginx/nginx.conf:ro   # replaces the step 1 file
+    depends_on: [gateway1, gateway2, gateway3]

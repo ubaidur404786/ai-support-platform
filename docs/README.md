@@ -24,6 +24,7 @@ The whole story in one picture: [evolution.svg](architecture/evolution.svg)
 | v15 CI + Docker Hub | Images built by hand, not tested | [svg](architecture/v15.svg) | [short](versions/v15-ci-docker-hub/README.md) · [full](versions/v15-ci-docker-hub.md) |
 | v16 Kubernetes | One API copy could take the whole system down | [svg](architecture/v16.svg) | [short](versions/v16-kubernetes/README.md) · [full](versions/v16-kubernetes.md) |
 | v17 Web app | Only usable with curl | [svg](architecture/v17.svg) | [short](versions/v17-react-frontend/README.md) · [full](versions/v17-react-frontend.md) |
+| v18 System design | Which part to copy when users grow? Measured with nginx, gateways, replicas and shards | [svg](architecture/v18.svg) | [short](versions/v18-system-design/README.md) · [full](versions/v18-system-design.md) · [lab](../system-design/README.md) |
 
 ## Decisions
 

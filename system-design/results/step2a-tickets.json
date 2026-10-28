@@ -1,0 +1,73 @@
+{
+  "label": "step2a-tickets",
+  "method": "GET",
+  "path": "/api/tickets",
+  "rows": [
+    {
+      "users": 1,
+      "rps": 14.1,
+      "p50": 63.5,
+      "p95": 73.4,
+      "p99": 249.3,
+      "errors": 0,
+      "gateways": {
+        "gateway2": 47,
+        "gateway3": 47,
+        "gateway1": 47
+      }
+    },
+    {
+      "users": 10,
+      "rps": 17.0,
+      "p50": 567.1,
+      "p95": 739.7,
+      "p99": 925.3,
+      "errors": 0,
+      "gateways": {
+        "gateway3": 57,
+        "gateway1": 56,
+        "gateway2": 57
+      }
+    },
+    {
+      "users": 50,
+      "rps": 21.0,
+      "p50": 2842.4,
+      "p95": 3373.7,
+      "p99": 3688.4,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 70,
+        "gateway3": 70,
+        "gateway2": 70
+      }
+    },
+    {
+      "users": 100,
+      "rps": 26.6,
+      "p50": 5604.2,
+      "p95": 6003.7,
+      "p99": 6319.5,
+      "errors": 0,
+      "gateways": {
+        "gateway3": 88,
+        "gateway2": 89,
+        "gateway1": 89
+      }
+    },
+    {
+      "users": 200,
+      "rps": 34.7,
+      "p50": 10016.0,
+      "p95": 11425.9,
+      "p99": 11486.0,
+      "errors": 172,
+      "gateways": {
+        "gateway3": 67,
+        "gateway1": 64,
+        "gateway2": 44,
+        "?": 172
+      }
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+# Step 4: tickets split across two databases (shards) by user_id.
+#   docker compose -f docker-compose.yml -f step4-shards.yml up -d
+#
+#   user_id even -> db        (shard 0)
+#   user_id odd  -> db-shard-1 (shard 1)
+#
+# Each shard has half the tickets and takes half the writes.
+
+services:
+  db:
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: lab
+      SHARD_COUNT: "2"
+      SHARD_INDEX: "0"
+
+  db-shard-1:
+    image: postgres:17-alpine
+    cpus: 1.0
+    hostname: db-shard-1
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: lab
+      SHARD_COUNT: "2"
+      SHARD_INDEX: "1"
+    volumes:
+      - ./db/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+      - ./db/schema.sql:/sql/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lab -d lab"]
+      interval: 3s
+      retries: 20
+
+  tickets-service:
+    environment:
+      # The order matters: position 0 = shard 0, position 1 = shard 1.
+      DATABASE_URLS: postgresql://lab:lab@db:5432/lab,postgresql://lab:lab@db-shard-1:5432/lab
+    depends_on:
+      db: { condition: service_healthy }
+      db-shard-1: { condition: service_healthy }

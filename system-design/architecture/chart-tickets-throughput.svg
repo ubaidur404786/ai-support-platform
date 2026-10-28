@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="400" viewBox="0 0 720 400" font-family="Arial, Helvetica, sans-serif" font-size="12">
+<rect width="720" height="400" fill="#fcfcfb"/>
+<text x="70" y="28" font-size="16" font-weight="bold" fill="#0b0b0b">Throughput: GET /api/tickets/{id} (CPU work in the service)</text>
+<text x="70" y="48" fill="#52514e">Requests finished per second. Higher is better.</text>
+<line x1="70" x2="570" y1="350.0" y2="350.0" stroke="#e1e0d9"/>
+<text x="62" y="354.0" text-anchor="end" fill="#898781">0</text>
+<line x1="70" x2="570" y1="280.0" y2="280.0" stroke="#e1e0d9"/>
+<text x="62" y="284.0" text-anchor="end" fill="#898781">17</text>
+<line x1="70" x2="570" y1="210.0" y2="210.0" stroke="#e1e0d9"/>
+<text x="62" y="214.0" text-anchor="end" fill="#898781">35</text>
+<line x1="70" x2="570" y1="140.0" y2="140.0" stroke="#e1e0d9"/>
+<text x="62" y="144.0" text-anchor="end" fill="#898781">52</text>
+<line x1="70" x2="570" y1="70.0" y2="70.0" stroke="#e1e0d9"/>
+<text x="62" y="74.0" text-anchor="end" fill="#898781">69</text>
+<text x="70.0" y="368" text-anchor="middle" fill="#898781">1</text>
+<text x="195.0" y="368" text-anchor="middle" fill="#898781">10</text>
+<text x="320.0" y="368" text-anchor="middle" fill="#898781">50</text>
+<text x="445.0" y="368" text-anchor="middle" fill="#898781">100</text>
+<text x="570.0" y="368" text-anchor="middle" fill="#898781">200</text>
+<text x="320.0" y="388" text-anchor="middle" fill="#898781">users sending requests at the same time</text>
+<text x="16" y="58" fill="#898781">req/s</text>
+<polyline points="70.0,298.8 195.0,282.2 320.0,270.5 445.0,247.1 570.0,226.6" fill="none" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="70.0" cy="298.8" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="195.0" cy="282.2" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="320.0" cy="270.5" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="445.0" cy="247.1" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="570.0" cy="226.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<text x="580.0" y="230.6" fill="#0b0b0b">1 gateway: 31</text>
+<polyline points="70.0,293.1 195.0,281.4 320.0,265.3 445.0,242.7 570.0,210.0" fill="none" stroke="#eb6834" stroke-width="2"/>
+<circle cx="70.0" cy="293.1" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="195.0" cy="281.4" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="320.0" cy="265.3" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="445.0" cy="242.7" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="570.0" cy="210.0" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="580.0" y="214.0" fill="#0b0b0b">3 gateways: 35</text>
+<polyline points="70.0,319.3 195.0,143.1 320.0,122.5 445.0,124.5 570.0,95.5" fill="none" stroke="#1baf7a" stroke-width="2"/>
+<circle cx="70.0" cy="319.3" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="195.0" cy="143.1" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="320.0" cy="122.5" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="445.0" cy="124.5" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="570.0" cy="95.5" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<text x="580.0" y="99.5" fill="#0b0b0b">3 cells: 63</text>
+</svg>
