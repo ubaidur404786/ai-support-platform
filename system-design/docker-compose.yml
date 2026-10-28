@@ -1,0 +1,82 @@
+# System design lab, step 1: ONE gateway.
+#
+#   user -> nginx (port 8090) -> gateway1 -> users-service / tickets-service -> db
+#
+# Start:      docker compose up -d --build
+# Load test:  docker compose run --rm loadtest python loadtest/loadtest.py --path /api/tickets
+# Stop:       docker compose down -v
+#
+# Every container joins one Docker network and reaches the others by
+# their service name (http://gateway1:8000, db:5432). Only nginx has a
+# `ports:` line, because it is the only thing your browser must reach.
+
+x-python: &python
+  # All Python containers share one image. Only users-service has `build`,
+  # so it is built once; the others reuse it.
+  image: sd-python
+  pull_policy: never
+  restart: unless-stopped
+  # Each app container gets 1 CPU, like one small server.
+  # This keeps the experiment fair on a laptop with many cores.
+  cpus: 1.0
+
+x-db-url: &db-url
+  DATABASE_URL: postgresql://lab:lab@db:5432/lab
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: lab
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lab -d lab"]
+      interval: 3s
+      retries: 10
+
+  users-service:
+    <<: *python
+    hostname: users-service   # shown as served_by / X-Gateway
+    build: .
+    command: ["uvicorn", "services.users.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment: *db-url
+    depends_on:
+      db: { condition: service_healthy }
+
+  tickets-service:
+    <<: *python
+    hostname: tickets-service   # shown as served_by / X-Gateway
+    command: ["uvicorn", "services.tickets.main:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment: *db-url
+    depends_on:
+      db: { condition: service_healthy }
+
+  gateway1:
+    <<: *python
+    hostname: gateway1   # shown as served_by / X-Gateway
+    command: ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      USERS_SERVICE_URL: http://users-service:8001
+      TICKETS_SERVICE_URL: http://tickets-service:8002
+    depends_on: [users-service, tickets-service]
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8090:80"          # your machine's port 8090 -> nginx's port 80
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro   # our config, mounted read-only
+    depends_on: [gateway1]
+    restart: unless-stopped
+
+  # Not started by `up`; run it with `docker compose run --rm loadtest ...`.
+  # It runs inside the network, so it calls http://nginx like a user would.
+  loadtest:
+    <<: *python
+    restart: "no"
+    cpus: 2.0
+    profiles: ["tools"]
+    command: ["python", "loadtest/loadtest.py"]

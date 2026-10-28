@@ -1,0 +1,5 @@
+http://nginx/api/users  (15 s per level)
+users=   1  req/s=   37.7  p50=   20.5 ms  p95=   37.3 ms  p99=   77.7 ms  errors=0  gateways={'gateway1': 566}
+users=  10  req/s=   96.9  p50=   77.5 ms  p95=  247.2 ms  p99=  392.5 ms  errors=0  gateways={'gateway1': 1453}
+users=  50  req/s=   82.0  p50=  460.5 ms  p95= 1589.0 ms  p99= 2634.7 ms  errors=0  gateways={'gateway1': 1230}
+users= 100  req/s=   39.1  p50= 2085.4 ms  p95= 6751.6 ms  p99= 7834.8 ms  errors=0  gateways={'gateway1': 587}
