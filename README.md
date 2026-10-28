@@ -6,28 +6,11 @@ A support assistant that answers customer questions from your own help articles.
 
 ![Platform system design](docs/architecture/v18.svg)
 
-**Why this design was selected.** Each choice comes from a measurement, not a guess:
-
-| Choice | Why |
-|---|---|
-| **Copy the model service first** | It is the slow part: about 7 s per answer on one CPU. In the lab, copying the busy service doubled throughput, while copying anything else gave nothing. |
-| **Stateless API behind one load balancer** | Login state is in the token (JWT) and rate-limit counts are in Redis, so any API copy can serve any request. Copies form one shared pool. |
-| **A shared pool, not one fixed group of services per gateway** | If a service in a fixed group dies, that gateway loses its capacity. In a shared pool, the load balancer sends the request to any healthy copy. |
-| **One read replica, on its own machine** | On one laptop, two replicas gave no gain (12.7 vs 13.1 req/s), because the copies shared the same hardware. On AWS it also serves as a standby. |
-| **No sharding** | Writes were not the bottleneck: two shards gave 61 vs 58 req/s. If it is ever needed, the shard key is `organization_id`. |
-| **Say "busy" early** | Above capacity, users only wait longer, so a bounded queue on the model service refuses extra requests immediately. |
-
-**The measurement behind it.** A small lab in [system-design/](system-design/README.md) has nginx with a hand-written config, 1 or 3 gateways, services, and PostgreSQL with replicas and shards. Each container gets 1 CPU, and every setup gets the same load test. Results at 100 users:
+**Why this design:** each choice was measured in the [system design lab](system-design/README.md).
 
 ![Scaling results](system-design/architecture/step2-scaling.svg)
 
-| Setup | Requests/s | Median wait (P50) |
-|---|---|---|
-| 1 gateway | 26 | 5.6 s |
-| 3 gateways, same single service | 27 | 5.6 s |
-| 3 gateways, each with its own service copy | **56** | **1.9 s** |
-
-The lab README covers the charts, the Docker networking, how to scale by hand, and when replication and sharding help.
+Details: [docs/system-design-details.md](docs/system-design-details.md) · [ADR-040](docs/adr/ADR-040-scale-the-bottleneck.md)
 
 ## The web app
 
