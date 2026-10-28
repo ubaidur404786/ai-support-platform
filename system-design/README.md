@@ -4,8 +4,6 @@ A small, separate system for learning **how and why an architecture changes when
 
 It was built step by step. Each step changes one thing and is measured.
 
-![The complete picture](architecture/overview.svg)
-
 | Step | Change | Result at 100 users (GET /api/tickets) |
 |---|---|---|
 | 1 | One gateway | 26 req/s, P50 5.6 s |
@@ -15,6 +13,36 @@ It was built step by step. Each step changes one thing and is measured.
 | 4 | Two shards (tickets split by user) | writes no gain; whole-table reads +35% |
 
 The design chosen for the AI support platform, and why, is at the end: [From the lab to the platform](#from-the-lab-to-the-platform).
+
+## All diagrams, in order
+
+Read left to right, top to bottom. Each section below explains one of them.
+
+<table>
+<tr>
+<td width="50%"><b>1. The complete picture</b><br><img src="architecture/overview.svg" width="100%"></td>
+<td width="50%"><b>2. How the containers find each other</b><br><img src="architecture/networking.svg" width="100%"></td>
+</tr>
+<tr>
+<td colspan="2"><b>3. Steps 1 and 2: one gateway → three gateways → three cells (measured)</b><br><img src="architecture/step2-scaling.svg" width="100%"></td>
+</tr>
+<tr>
+<td><b>4. Throughput, tickets (service-bound)</b><br><img src="architecture/chart-tickets-throughput.svg" width="100%"></td>
+<td><b>5. Latency, tickets</b><br><img src="architecture/chart-tickets-latency.svg" width="100%"></td>
+</tr>
+<tr>
+<td><b>6. Throughput, users (gateway-bound)</b><br><img src="architecture/chart-users-throughput.svg" width="100%"></td>
+<td><b>7. Latency, users</b><br><img src="architecture/chart-users-latency.svg" width="100%"></td>
+</tr>
+<tr>
+<td><b>8. Step 3: read replicas</b><br><img src="architecture/step3-replication.svg" width="100%"></td>
+<td><b>9. Step 4: sharding</b><br><img src="architecture/step4-sharding.svg" width="100%"></td>
+</tr>
+<tr>
+<td><b>10. Database steps compared</b><br><img src="architecture/chart-database.svg" width="100%"></td>
+<td><b>11. The design chosen for the platform</b><br><img src="../docs/architecture/v18.svg" width="100%"></td>
+</tr>
+</table>
 
 ## The parts
 
@@ -72,7 +100,7 @@ Stop everything with `docker compose down -v`.
 
 ## Step 1: one gateway
 
-![Step 1](architecture/step1-one-gateway.svg)
+*Diagram 3, left column.*
 
 The flow of one request:
 
@@ -94,10 +122,9 @@ browser -> nginx:80 -> gateway1:8000 -> tickets-service:8002 -> db:5432
 
 **Horizontal scaling** means adding more copies of a part. **Vertical scaling** means giving one copy a bigger machine. Copies only help if a request can go to any copy, so the copies must keep no state of their own (here, everything is in PostgreSQL).
 
-![Step 2](architecture/step2-scaling.svg)
+*Diagram 3.*
 
-![Throughput, tickets](architecture/chart-tickets-throughput.svg)
-![Latency, tickets](architecture/chart-tickets-latency.svg)
+*Diagrams 4 and 5.*
 
 **2a: three gateways, one tickets-service.** Throughput was 27 req/s instead of 26. Nothing changed, because the gateways were not the slow part. All three gateways still sent their work to the same busy tickets-service.
 
@@ -105,8 +132,7 @@ browser -> nginx:80 -> gateway1:8000 -> tickets-service:8002 -> db:5432
 
 **The other endpoint shows the other side.** `GET /api/users/{id}` does almost no CPU work in the service, so there the gateway itself is the busy part. In step 1 the gateway used 72% CPU. With three gateways, throughput went from **~50-70 to ~155-200 req/s**.
 
-![Throughput, users](architecture/chart-users-throughput.svg)
-![Latency, users](architecture/chart-users-latency.svg)
+*Diagrams 6 and 7.*
 
 **The rule:** first find which box is busy, then add copies of that box. Different endpoints can have different bottlenecks.
 
@@ -125,7 +151,7 @@ browser -> nginx:80 -> gateway1:8000 -> tickets-service:8002 -> db:5432
 
 ## Docker Compose networking
 
-![Networking](architecture/networking.svg)
+*Diagram 2.*
 
 - **One private network.** Every container joins it and reaches the others by **service name**: `http://gateway1:8000`, `db:5432`. No IP addresses appear in any file.
 - **Ports.** `ports: "8090:80"` means "port 8090 on my laptop leads to port 80 in this container." Only nginx has a port mapping, because only the browser needs to get in from outside. The gateways, services and databases have none, so nobody outside can call them directly.
@@ -136,7 +162,7 @@ browser -> nginx:80 -> gateway1:8000 -> tickets-service:8002 -> db:5432
 
 ## Step 3: database replication
 
-![Replication](architecture/step3-replication.svg)
+*Diagrams 8 and 10.*
 
 **What it is.** One **primary** database takes every write. **Read replicas** are full, read-only copies. Each replica copies the primary once with `pg_basebackup`, then receives every change as the primary writes it. This is called streaming replication, and the changes travel as WAL, the primary's log of changes. tickets-service sends the heavy `GET /tickets/stats` query to the replicas in turn and sends all writes to the primary.
 
@@ -155,7 +181,7 @@ browser -> nginx:80 -> gateway1:8000 -> tickets-service:8002 -> db:5432
 
 ## Step 4: sharding
 
-![Sharding](architecture/step4-sharding.svg)
+*Diagrams 9 and 10.*
 
 **What it is.** The tickets are split by a **shard key**, here `user_id % 2`.
 - Even user ids live on `db` (shard 0) and odd user ids on `db-shard-1` (shard 1). After the test: 101,415 tickets on shard 0 and 101,427 on shard 1.
@@ -175,7 +201,7 @@ browser -> nginx:80 -> gateway1:8000 -> tickets-service:8002 -> db:5432
 
 ## From the lab to the platform
 
-![v18 platform design](../docs/architecture/v18.svg)
+*Diagram 11.*
 
 The lab's results, applied to the AI support platform:
 
