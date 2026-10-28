@@ -36,8 +36,9 @@ async def health():
     return {"status": "ok", "gateway": HOST}
 
 
+@app.api_route("/api/{service}", methods=["GET", "POST"])
 @app.api_route("/api/{service}/{path:path}", methods=["GET", "POST"])
-async def forward(service: str, path: str, request: Request):
+async def forward(service: str, request: Request, path: str = ""):
     base_url = SERVICES.get(service)
     if base_url is None:
         return Response(status_code=404, content=b'{"detail":"unknown service"}', media_type="application/json")
@@ -45,8 +46,9 @@ async def forward(service: str, path: str, request: Request):
     try:
         upstream = await client.request(
             request.method,
-            f"{base_url}/{service}/{path}",
+            f"{base_url}/{service}/{path}".rstrip("/"),
             content=await request.body(),
+            params=request.query_params,
             headers={"content-type": request.headers.get("content-type", "application/json")},
         )
     except httpx.RequestError:

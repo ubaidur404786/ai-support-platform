@@ -1,0 +1,51 @@
+# Step 2b: each gateway gets ITS OWN copy of every service (a "cell").
+#   docker compose -f docker-compose.yml -f step2-gateways.yml -f step2-cells.yml up -d
+#
+#   gateway1 -> users-service   + tickets-service
+#   gateway2 -> users-service-2 + tickets-service-2
+#   gateway3 -> users-service-3 + tickets-service-3
+#
+# The gateway learns its services only from these two environment variables.
+
+x-service: &service
+  image: sd-python
+  pull_policy: never
+  restart: unless-stopped
+  cpus: 1.0
+  depends_on:
+    db: { condition: service_healthy }
+
+services:
+  users-service-2:
+    <<: *service
+    hostname: users-service-2
+    command: ["uvicorn", "services.users.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment: { DATABASE_URL: "postgresql://lab:lab@db:5432/lab" }
+
+  users-service-3:
+    <<: *service
+    hostname: users-service-3
+    command: ["uvicorn", "services.users.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment: { DATABASE_URL: "postgresql://lab:lab@db:5432/lab" }
+
+  tickets-service-2:
+    <<: *service
+    hostname: tickets-service-2
+    command: ["uvicorn", "services.tickets.main:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment: { DATABASE_URLS: "postgresql://lab:lab@db:5432/lab" }
+
+  tickets-service-3:
+    <<: *service
+    hostname: tickets-service-3
+    command: ["uvicorn", "services.tickets.main:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment: { DATABASE_URLS: "postgresql://lab:lab@db:5432/lab" }
+
+  gateway2:
+    environment:
+      USERS_SERVICE_URL: http://users-service-2:8001
+      TICKETS_SERVICE_URL: http://tickets-service-2:8002
+
+  gateway3:
+    environment:
+      USERS_SERVICE_URL: http://users-service-3:8001
+      TICKETS_SERVICE_URL: http://tickets-service-3:8002

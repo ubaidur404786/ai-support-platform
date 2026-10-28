@@ -1,0 +1,41 @@
+# Step 3: two read replicas of the database.
+#   docker compose -f docker-compose.yml -f step3-replicas.yml up -d
+#
+#   writes (POST /tickets)       -> db (primary)
+#   heavy reads (GET /stats)     -> db-replica-1, db-replica-2 (round robin)
+#
+# Each replica copies the primary once, then receives every change as it
+# happens (streaming replication). Replicas are read-only.
+
+x-replica: &replica
+  image: postgres:17-alpine
+  cpus: 1.0
+  user: postgres
+  environment:
+    PRIMARY_HOST: db
+  volumes:
+    - ./db/replica.sh:/replica.sh:ro
+  entrypoint: ["sh", "/replica.sh"]
+  depends_on:
+    db: { condition: service_healthy }
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U lab -d lab"]
+    interval: 3s
+    retries: 40
+
+services:
+  db-replica-1:
+    <<: *replica
+    hostname: db-replica-1
+
+  db-replica-2:
+    <<: *replica
+    hostname: db-replica-2
+
+  tickets-service:
+    environment:
+      DATABASE_URLS: postgresql://lab:lab@db:5432/lab
+      READ_DATABASE_URLS: postgresql://lab:lab@db-replica-1:5432/lab,postgresql://lab:lab@db-replica-2:5432/lab
+    depends_on:
+      db-replica-1: { condition: service_healthy }
+      db-replica-2: { condition: service_healthy }

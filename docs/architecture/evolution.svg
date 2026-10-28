@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="2346" viewBox="0 0 1180 2346" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="2460" viewBox="0 0 1180 2460" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
   <defs>
     <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
       <path d="M0,0 L8,4 L0,8 z" fill="#444"/>
     </marker>
   </defs>
 
-  <rect width="1180" height="2346" fill="#ffffff"/>
+  <rect width="1180" height="2460" fill="#ffffff"/>
 
-  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v17</text>
+  <text x="30" y="36" font-size="21" font-weight="bold" fill="#1a1a1a">Architecture evolution — v0 to v18</text>
   <text x="30" y="58" fill="#555">Each version exists because the previous one produced a measured limitation. Red = the problem. Blue = the change. Grey = what was measured.</text>
 
   <!-- ============ SECTION A: how the request path changed ============ -->
@@ -461,10 +461,30 @@
   <text x="896" y="2190" font-size="11" fill="#222">smoke test end to end: OK</text>
   <text x="896" y="2212" font-size="10" fill="#777">answer ~27–43 s in the laptop's VM.</text>
 
+  <!-- row v18 -->
+  <rect x="30" y="2248" width="110" height="96" rx="4" fill="#f4f6f8" stroke="#bbb"/>
+  <text x="85" y="2291" text-anchor="middle" font-size="12" font-weight="bold" fill="#222">v18</text>
+  <text x="85" y="2307" text-anchor="middle" font-size="10" fill="#666">System design lab</text>
+  <rect x="146" y="2248" width="374" height="96" rx="4" fill="#fdf0ef" stroke="#e0b4b0"/>
+  <text x="158" y="2268" font-size="11" fill="#333">Before paying for cloud machines: which part must</text>
+  <text x="158" y="2284" font-size="11" fill="#333">be copied when users grow? One gateway, 100 users:</text>
+  <text x="158" y="2300" font-size="11" fill="#333">26 req/s, P50 5.6 s.</text>
+  <text x="158" y="2322" font-size="11" fill="#c62828">Problem: unclear what to scale, and why.</text>
+  <rect x="526" y="2248" width="352" height="96" rx="4" fill="#eef4fd" stroke="#b6cdf0"/>
+  <text x="538" y="2268" font-size="11" fill="#333">system-design/: nginx -&gt; 3 gateways -&gt; services,</text>
+  <text x="538" y="2284" font-size="11" fill="#333">primary + 2 replicas, 2 shards; load test + charts.</text>
+  <text x="538" y="2300" font-size="11" fill="#333">Platform design: copy the model service, 1 replica.</text>
+  <text x="538" y="2322" font-size="10" fill="#777">Replicas/shards gave no gain on one laptop.</text>
+  <rect x="884" y="2248" width="266" height="96" rx="4" fill="#f4f6f8" stroke="#ccc"/>
+  <text x="896" y="2268" font-size="11" fill="#222">3 gateways only: 27 req/s (no gain)</text>
+  <text x="896" y="2286" font-size="11" fill="#222">3 cells: 56 req/s, P50 5.6 s -&gt; 1.9 s</text>
+  <text x="896" y="2304" font-size="11" fill="#222">users path: gateway bound, 3x gateways ~3x</text>
+  <text x="896" y="2326" font-size="10" fill="#777">100 users, 1 CPU per container.</text>
+
   <!-- next -->
-  <rect x="30" y="2248" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
-  <text x="44" y="2270" font-size="12" font-weight="bold" fill="#222">Open after v17 — what the next versions must answer</text>
-  <text x="44" y="2290" font-size="11.5" fill="#333">1. Runs only on this laptop → v18: k3s on one AWS machine pulling from Docker Hub (needs a write token).   2. Capacity is one CPU (5–10 answers/min).</text>
-  <text x="44" y="2306" font-size="11.5" fill="#333">3. Answers slow inside the laptop's Docker VM.   4. Paraphrase misses (sources right 80%).   5. Wrong answers not detected at runtime.</text>
-  <text x="44" y="2322" font-size="11.5" fill="#333">6. Nothing alerts on a stopped worker or model service.   7. No token refresh or revocation.   8. No browser-level automated test.</text>
+  <rect x="30" y="2362" width="1120" height="76" rx="5" fill="#fdf0ef" stroke="#c62828"/>
+  <text x="44" y="2384" font-size="12" font-weight="bold" fill="#222">Open after v18 — what the next versions must answer</text>
+  <text x="44" y="2404" font-size="11.5" fill="#333">1. Runs only on this laptop -&gt; v19: AWS (separate machines; re-measure replicas there).   2. Capacity is one CPU (5–10 answers/min).</text>
+  <text x="44" y="2420" font-size="11.5" fill="#333">3. Answers slow inside the laptop's Docker VM.   4. Paraphrase misses (sources right 80%).   5. Wrong answers not detected at runtime.</text>
+  <text x="44" y="2436" font-size="11.5" fill="#333">6. Nothing alerts on a stopped worker or model service.   7. No token refresh or revocation.   8. No browser-level automated test.</text>
 </svg>

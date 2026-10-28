@@ -6,6 +6,9 @@
 # Load test:  docker compose run --rm loadtest python loadtest/loadtest.py --path /api/tickets
 # Stop:       docker compose down -v
 #
+# Later steps ADD files on top of this one (see README.md), for example:
+#   docker compose -f docker-compose.yml -f step2-gateways.yml up -d
+#
 # Every container joins one Docker network and reaches the others by
 # their service name (http://gateway1:8000, db:5432). Only nginx has a
 # `ports:` line, because it is the only thing your browser must reach.
@@ -20,43 +23,45 @@ x-python: &python
   # This keeps the experiment fair on a laptop with many cores.
   cpus: 1.0
 
-x-db-url: &db-url
-  DATABASE_URL: postgresql://lab:lab@db:5432/lab
-
 services:
+  # The primary database: every write goes here.
   db:
     image: postgres:17-alpine
+    cpus: 1.0
     environment:
       POSTGRES_USER: lab
       POSTGRES_PASSWORD: lab
       POSTGRES_DB: lab
     volumes:
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./db/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+      - ./db/schema.sql:/sql/schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lab -d lab"]
       interval: 3s
-      retries: 10
+      retries: 20
 
   users-service:
     <<: *python
-    hostname: users-service   # shown as served_by / X-Gateway
     build: .
+    hostname: users-service   # shown as served_by
     command: ["uvicorn", "services.users.main:app", "--host", "0.0.0.0", "--port", "8001"]
-    environment: *db-url
+    environment:
+      DATABASE_URL: postgresql://lab:lab@db:5432/lab
     depends_on:
       db: { condition: service_healthy }
 
   tickets-service:
     <<: *python
-    hostname: tickets-service   # shown as served_by / X-Gateway
+    hostname: tickets-service
     command: ["uvicorn", "services.tickets.main:app", "--host", "0.0.0.0", "--port", "8002"]
-    environment: *db-url
+    environment:
+      DATABASE_URLS: postgresql://lab:lab@db:5432/lab
     depends_on:
       db: { condition: service_healthy }
 
   gateway1:
     <<: *python
-    hostname: gateway1   # shown as served_by / X-Gateway
+    hostname: gateway1        # shown as X-Gateway
     command: ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       USERS_SERVICE_URL: http://users-service:8001
@@ -77,6 +82,8 @@ services:
   loadtest:
     <<: *python
     restart: "no"
-    cpus: 2.0
+    cpus: 4.0
     profiles: ["tools"]
     command: ["python", "loadtest/loadtest.py"]
+    volumes:
+      - ./results:/app/results   # results/*.json land on your disk

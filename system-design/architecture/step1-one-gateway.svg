@@ -52,23 +52,23 @@
   <text x="380" y="308" text-anchor="middle" font-size="12" fill="#555">Only nginx publishes a port. Every app container is limited to 1 CPU, like one small server.</text>
 
   <!-- measurements -->
-  <text x="20" y="352" font-weight="bold" font-size="15">Measured: GET /api/tickets/{id}, 15 s per level, laptop, Docker Desktop</text>
+  <text x="20" y="352" font-weight="bold" font-size="15">Measured: GET /api/tickets/{id}, 10 s per level, laptop, Docker Desktop</text>
   <g font-size="13">
     <rect x="20" y="364" width="940" height="28" fill="#f2f2f2" stroke="#999"/>
     <text x="40" y="383" font-weight="bold">users</text><text x="200" y="383" font-weight="bold">requests / s</text><text x="400" y="383" font-weight="bold">P50 latency</text><text x="600" y="383" font-weight="bold">P95 latency</text>
     <rect x="20" y="392" width="940" height="26" fill="#fff" stroke="#999"/>
-    <text x="40" y="410">1</text><text x="200" y="410">14.5</text><text x="400" y="410">61 ms</text><text x="600" y="410">94 ms</text>
+    <text x="40" y="410">1</text><text x="200" y="410">12.7</text><text x="400" y="410">70 ms</text><text x="600" y="410">120 ms</text>
     <rect x="20" y="418" width="940" height="26" fill="#fff" stroke="#999"/>
-    <text x="40" y="436">10</text><text x="200" y="436">20.5</text><text x="400" y="436">495 ms</text><text x="600" y="436">590 ms</text>
+    <text x="40" y="436">10</text><text x="200" y="436">16.8</text><text x="400" y="436">563 ms</text><text x="600" y="436">754 ms</text>
     <rect x="20" y="444" width="940" height="26" fill="#fff" stroke="#999"/>
-    <text x="40" y="462">50</text><text x="200" y="462">20.8</text><text x="400" y="462">2,605 ms</text><text x="600" y="462">3,542 ms</text>
+    <text x="40" y="462">50</text><text x="200" y="462">19.7</text><text x="400" y="462">2,852 ms</text><text x="600" y="462">4,239 ms</text>
     <rect x="20" y="470" width="940" height="26" fill="#fff" stroke="#999"/>
-    <text x="40" y="488">100</text><text x="200" y="488">24.6</text><text x="400" y="488">5,165 ms</text><text x="600" y="488">6,075 ms</text>
+    <text x="40" y="488">100</text><text x="200" y="488">25.5</text><text x="400" y="488">5,568 ms</text><text x="600" y="488">7,268 ms</text>
   </g>
 
   <rect x="20" y="512" width="940" height="56" rx="6" fill="#fde8e8" stroke="#c81e1e"/>
-  <text x="36" y="535" font-weight="bold" fill="#c81e1e">Problem: throughput stays at ~20 req/s; more users only wait longer in line.</text>
-  <text x="36" y="555">During the test tickets-service used 93% of its 1 CPU; gateway1 used 13%. Wait time = users / throughput (100 / 20 = 5 s).</text>
+  <text x="36" y="535" font-weight="bold" fill="#c81e1e">Problem: throughput stays at 13-26 req/s; more users only wait longer in line.</text>
+  <text x="36" y="555">During the test tickets-service used 93% of its 1 CPU; gateway1 used 13%. Wait time = users / throughput (100 / 20 = 5 s; measured 5.6 s).</text>
 
   <rect x="20" y="578" width="940" height="48" rx="6" fill="#e8f0fe" stroke="#1a56db"/>
   <text x="36" y="600" font-weight="bold" fill="#1a56db">Next (step 2): add copies (horizontal scaling) and measure which copies actually help:</text>

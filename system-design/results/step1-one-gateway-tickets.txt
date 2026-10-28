@@ -1,5 +1,0 @@
-http://nginx/api/tickets  (15 s per level)
-users=   1  req/s=   14.5  p50=   61.3 ms  p95=   94.0 ms  p99=  120.4 ms  errors=0  gateways={'gateway1': 218}
-users=  10  req/s=   20.5  p50=  494.6 ms  p95=  589.8 ms  p99=  663.2 ms  errors=0  gateways={'gateway1': 308}
-users=  50  req/s=   20.8  p50= 2604.9 ms  p95= 3541.8 ms  p99= 4211.6 ms  errors=0  gateways={'gateway1': 312}
-users= 100  req/s=   24.6  p50= 5164.5 ms  p95= 6074.8 ms  p99= 7266.0 ms  errors=0  gateways={'gateway1': 369}

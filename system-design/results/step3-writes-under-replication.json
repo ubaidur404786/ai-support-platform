@@ -1,0 +1,18 @@
+{
+  "label": "step3-writes-under-replication",
+  "method": "POST",
+  "path": "/api/tickets",
+  "rows": [
+    {
+      "users": 50,
+      "rps": 35.2,
+      "p50": 1128.1,
+      "p95": 3424.8,
+      "p99": 5402.6,
+      "errors": 0,
+      "gateways": {
+        "gateway1": 352
+      }
+    }
+  ]
+}

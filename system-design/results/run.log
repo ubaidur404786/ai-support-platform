@@ -1,0 +1,82 @@
+== step 1: one gateway
+GET http://nginx/api/users  (10 s per level)
+users=   1  req/s=   11.4  p50=   16.9 ms  p95=   20.9 ms  p99=   52.5 ms  errors=0  gateways={'gateway1': 114}
+users=  10  req/s=   49.7  p50=  150.2 ms  p95=  491.2 ms  p99=  730.8 ms  errors=0  gateways={'gateway1': 497}
+users=  50  req/s=   21.3  p50= 1579.4 ms  p95= 4568.7 ms  p99= 5188.0 ms  errors=1  gateways={'gateway1': 212, '?': 1}
+users= 100  req/s=   51.1  p50= 1422.1 ms  p95= 5627.4 ms  p99= 6844.4 ms  errors=0  gateways={'gateway1': 511}
+users= 200  req/s=   71.0  p50= 2444.8 ms  p95= 8106.1 ms  p99=10468.8 ms  errors=0  gateways={'gateway1': 710}
+GET http://nginx/api/tickets  (10 s per level)
+users=   1  req/s=   12.7  p50=   69.9 ms  p95=  120.2 ms  p99=  153.4 ms  errors=0  gateways={'gateway1': 127}
+users=  10  req/s=   16.8  p50=  563.3 ms  p95=  753.8 ms  p99=  824.8 ms  errors=0  gateways={'gateway1': 168}
+users=  50  req/s=   19.7  p50= 2852.2 ms  p95= 4239.0 ms  p99= 4792.8 ms  errors=0  gateways={'gateway1': 197}
+users= 100  req/s=   25.5  p50= 5568.2 ms  p95= 7268.0 ms  p99= 8176.2 ms  errors=0  gateways={'gateway1': 255}
+users= 200  req/s=   30.6  p50=10022.3 ms  p95=14421.9 ms  p99=14683.1 ms  errors=132  gateways={'gateway1': 174, '?': 132}
+GET http://nginx/api/tickets/stats  (10 s per level)
+users=   1  req/s=    8.6  p50=   98.8 ms  p95=  165.1 ms  p99=  895.0 ms  errors=0  gateways={'gateway1': 86}
+users=  10  req/s=    9.0  p50= 1109.8 ms  p95= 1496.1 ms  p99= 1957.8 ms  errors=0  gateways={'gateway1': 90}
+users=  50  req/s=   13.1  p50= 5494.0 ms  p95= 6073.9 ms  p99= 6297.5 ms  errors=0  gateways={'gateway1': 131}
+users= 100  req/s=   17.5  p50=10017.8 ms  p95=11745.0 ms  p99=11781.7 ms  errors=86  gateways={'gateway1': 89, '?': 86}
+users= 200  req/s=   23.7  p50=13369.8 ms  p95=13861.5 ms  p99=14034.2 ms  errors=162  gateways={'gateway1': 75, '?': 162}
+POST http://nginx/api/tickets  (10 s per level)
+users=   1  req/s=   15.8  p50=   27.9 ms  p95=   43.4 ms  p99=   78.4 ms  errors=0  gateways={'gateway1': 158}
+users=  10  req/s=   77.9  p50=  100.9 ms  p95=  270.4 ms  p99=  349.4 ms  errors=0  gateways={'gateway1': 779}
+users=  50  req/s=   58.1  p50=  685.4 ms  p95= 2251.1 ms  p99= 2948.5 ms  errors=0  gateways={'gateway1': 581}
+users= 100  req/s=   63.5  p50= 1223.5 ms  p95= 4375.3 ms  p99= 7745.8 ms  errors=0  gateways={'gateway1': 635}
+users= 200  req/s=   63.6  p50= 2835.4 ms  p95= 9295.1 ms  p99=11624.0 ms  errors=0  gateways={'gateway1': 636}
+== step 2a: three gateways, one copy of each service
+GET http://nginx/api/users  (10 s per level)
+users=   1  req/s=    1.4  p50=   23.7 ms  p95= 8925.2 ms  p99= 8925.2 ms  errors=0  gateways={'gateway1': 5, 'gateway2': 5, 'gateway3': 4}
+users=  10  req/s=  153.8  p50=   50.4 ms  p95=   93.8 ms  p99=  440.8 ms  errors=0  gateways={'gateway3': 513, 'gateway1': 513, 'gateway2': 512}
+users=  50  req/s=  173.4  p50=  252.1 ms  p95=  408.6 ms  p99=  511.7 ms  errors=0  gateways={'gateway3': 578, 'gateway1': 578, 'gateway2': 578}
+users= 100  req/s=  165.7  p50=  430.3 ms  p95= 1692.6 ms  p99= 2598.5 ms  errors=0  gateways={'gateway3': 552, 'gateway1': 552, 'gateway2': 553}
+users= 200  req/s=  155.6  p50=  906.8 ms  p95= 4995.6 ms  p99= 7538.6 ms  errors=0  gateways={'gateway3': 519, 'gateway2': 518, 'gateway1': 519}
+GET http://nginx/api/tickets  (10 s per level)
+users=   1  req/s=   14.1  p50=   63.5 ms  p95=   73.4 ms  p99=  249.3 ms  errors=0  gateways={'gateway2': 47, 'gateway3': 47, 'gateway1': 47}
+users=  10  req/s=   17.0  p50=  567.1 ms  p95=  739.7 ms  p99=  925.3 ms  errors=0  gateways={'gateway3': 57, 'gateway1': 56, 'gateway2': 57}
+users=  50  req/s=   21.0  p50= 2842.4 ms  p95= 3373.7 ms  p99= 3688.4 ms  errors=0  gateways={'gateway1': 70, 'gateway3': 70, 'gateway2': 70}
+users= 100  req/s=   26.6  p50= 5604.2 ms  p95= 6003.7 ms  p99= 6319.5 ms  errors=0  gateways={'gateway3': 88, 'gateway2': 89, 'gateway1': 89}
+users= 200  req/s=   34.7  p50=10016.0 ms  p95=11425.9 ms  p99=11486.0 ms  errors=172  gateways={'gateway3': 67, 'gateway1': 64, 'gateway2': 44, '?': 172}
+== step 2b: three gateways, each with its own services
+GET http://nginx/api/users  (10 s per level)
+users=   1  req/s=    9.7  p50=   19.7 ms  p95=   29.6 ms  p99= 6987.1 ms  errors=0  gateways={'gateway1': 33, 'gateway2': 32, 'gateway3': 32}
+users=  10  req/s=  186.3  p50=   37.2 ms  p95=  117.4 ms  p99=  395.9 ms  errors=0  gateways={'gateway3': 621, 'gateway2': 621, 'gateway1': 621}
+users=  50  req/s=  139.8  p50=  202.8 ms  p95= 1220.1 ms  p99= 1757.4 ms  errors=0  gateways={'gateway2': 466, 'gateway3': 466, 'gateway1': 466}
+users= 100  req/s=  203.1  p50=  187.7 ms  p95= 2135.3 ms  p99= 3894.7 ms  errors=0  gateways={'gateway1': 677, 'gateway2': 677, 'gateway3': 677}
+users= 200  req/s=  138.6  p50=  889.6 ms  p95= 6157.2 ms  p99= 8613.5 ms  errors=3  gateways={'gateway2': 462, 'gateway1': 459, 'gateway3': 462, '?': 3}
+GET http://nginx/api/tickets  (10 s per level)
+users=   1  req/s=    7.6  p50=   90.5 ms  p95=  166.2 ms  p99= 1284.4 ms  errors=0  gateways={'gateway2': 26, 'gateway3': 25, 'gateway1': 25}
+users=  10  req/s=   51.3  p50=  154.3 ms  p95=  367.7 ms  p99=  460.4 ms  errors=0  gateways={'gateway1': 171, 'gateway2': 171, 'gateway3': 171}
+users=  50  req/s=   56.4  p50=  931.0 ms  p95= 1088.3 ms  p99= 1184.7 ms  errors=0  gateways={'gateway3': 188, 'gateway1': 188, 'gateway2': 188}
+users= 100  req/s=   55.9  p50= 1900.8 ms  p95= 2542.7 ms  p99= 3114.5 ms  errors=0  gateways={'gateway3': 187, 'gateway1': 186, 'gateway2': 186}
+users= 200  req/s=   63.1  p50= 3930.2 ms  p95= 5276.5 ms  p99= 6212.6 ms  errors=0  gateways={'gateway2': 210, 'gateway1': 211, 'gateway3': 210}
+== step 3: two read replicas
+GET http://nginx/api/tickets/stats  (10 s per level)
+users=   1  req/s=    7.9  p50=  100.4 ms  p95=  189.6 ms  p99= 1105.6 ms  errors=0  gateways={'gateway1': 79}
+users=  10  req/s=    8.5  p50= 1098.6 ms  p95= 3178.1 ms  p99= 4684.8 ms  errors=0  gateways={'gateway1': 85}
+users=  50  req/s=   12.7  p50= 5162.6 ms  p95= 6757.6 ms  p99= 7380.6 ms  errors=0  gateways={'gateway1': 127}
+users= 100  req/s=   14.6  p50=10033.6 ms  p95=12042.0 ms  p99=12097.7 ms  errors=86  gateways={'gateway1': 60, '?': 86}
+users= 200  req/s=   25.1  p50=12523.3 ms  p95=13253.2 ms  p99=13314.4 ms  errors=178  gateways={'?': 178, 'gateway1': 73}
+POST http://nginx/api/tickets  (10 s per level)
+ application_name | client_addr |   state   | write_lag | replay_lag 
+------------------+-------------+-----------+-----------+------------
+ walreceiver      | 172.20.0.5  | streaming |           | 
+ walreceiver      | 172.20.0.4  | streaming |           | 
+(2 rows)
+
+users=  50  req/s=   35.2  p50= 1128.1 ms  p95= 3424.8 ms  p99= 5402.6 ms  errors=0  gateways={'gateway1': 352}
+== step 4: two shards
+POST http://nginx/api/tickets  (10 s per level)
+users=   1  req/s=   37.4  p50=   23.5 ms  p95=   38.1 ms  p99=   49.3 ms  errors=0  gateways={'gateway1': 374}
+users=  10  req/s=   77.5  p50=  103.5 ms  p95=  267.7 ms  p99=  388.1 ms  errors=0  gateways={'gateway1': 775}
+users=  50  req/s=   61.1  p50=  663.6 ms  p95= 2017.2 ms  p99= 3144.2 ms  errors=0  gateways={'gateway1': 611}
+users= 100  req/s=   49.2  p50= 1639.9 ms  p95= 5110.7 ms  p99= 8247.8 ms  errors=0  gateways={'gateway1': 492}
+users= 200  req/s=   59.1  p50= 2701.2 ms  p95=10782.8 ms  p99=12908.6 ms  errors=1  gateways={'gateway1': 590, '?': 1}
+GET http://nginx/api/tickets/stats  (10 s per level)
+users=   1  req/s=    7.8  p50=  107.3 ms  p95=  165.3 ms  p99= 1003.0 ms  errors=0  gateways={'gateway1': 78}
+users=  10  req/s=   12.6  p50=  733.6 ms  p95= 1259.7 ms  p99= 1568.5 ms  errors=0  gateways={'gateway1': 126}
+users=  50  req/s=   17.7  p50= 3394.3 ms  p95= 4512.0 ms  p99= 5013.6 ms  errors=0  gateways={'gateway1': 177}
+users= 100  req/s=   21.3  p50= 6524.7 ms  p95= 8120.9 ms  p99= 8616.3 ms  errors=0  gateways={'gateway1': 213}
+users= 200  req/s=   33.4  p50=10020.0 ms  p95=13658.2 ms  p99=14090.1 ms  errors=149  gateways={'gateway1': 185, '?': 149}
+db|101415
+db-shard-1|101427
+done
