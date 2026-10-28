@@ -49,8 +49,6 @@ def line_chart(file, title, subtitle, series, key, unit):
         parts.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2"/>')
         for i, r in enumerate(rows):
             parts.append(f'<circle cx="{x(i):.1f}" cy="{y(r[key]):.1f}" r="4" fill="{color}" stroke="#fcfcfb" stroke-width="2"/>')
-        last = rows[-1]  # direct label at the end of each line
-        parts.append(f'<text x="{x(len(rows) - 1) + 10:.1f}" y="{y(last[key]) + 4:.1f}" fill="{INK}">{name}: {last[key]:,.0f}</text>')
     parts.append("</svg>")
     (OUT / file).write_text("\n".join(parts), encoding="utf-8")
 

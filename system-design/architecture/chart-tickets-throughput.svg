@@ -25,19 +25,16 @@
 <circle cx="320.0" cy="270.5" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="445.0" cy="247.1" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="570.0" cy="226.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<text x="580.0" y="230.6" fill="#0b0b0b">1 gateway: 31</text>
 <polyline points="70.0,293.1 195.0,281.4 320.0,265.3 445.0,242.7 570.0,210.0" fill="none" stroke="#eb6834" stroke-width="2"/>
 <circle cx="70.0" cy="293.1" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="195.0" cy="281.4" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="320.0" cy="265.3" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="445.0" cy="242.7" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="570.0" cy="210.0" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="580.0" y="214.0" fill="#0b0b0b">3 gateways: 35</text>
 <polyline points="70.0,319.3 195.0,143.1 320.0,122.5 445.0,124.5 570.0,95.5" fill="none" stroke="#1baf7a" stroke-width="2"/>
 <circle cx="70.0" cy="319.3" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="195.0" cy="143.1" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="320.0" cy="122.5" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="445.0" cy="124.5" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="570.0" cy="95.5" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
-<text x="580.0" y="99.5" fill="#0b0b0b">3 cells: 63</text>
 </svg>
