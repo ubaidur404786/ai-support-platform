@@ -1,8 +1,15 @@
-# How the project grew, version by version
+# The journey: how we started, what we faced, what we decided
 
-The project started as one small file and grew one step at a time. Each step fixed a problem that the previous step showed, and each one has its own Git branch (`v0-baseline`, `v1-modular-monolith`, …).
+The project started as one small file and grew one step at a time. Each step fixed a problem the previous step had shown, and each one has its own Git branch (`v0-baseline`, `v1-modular-monolith`, …).
 
-The whole story in one picture: [evolution.svg](architecture/evolution.svg)
+| Phase | Versions | The question it answered |
+|---|---|---|
+| A working, safe API | v0-v5 | Can it classify tickets, keep them, page through them, know who is asking, and protect itself? |
+| Knowledge and AI answers | v6-v12 | Can it read documents, search them by meaning, and answer from them without making things up? |
+| Services and operations | v13-v17 | Can each part run, restart and scale on its own, with a web app in front? |
+| System design | v18 | When users grow, which part must be copied, and why? |
+
+The whole story in one picture: [evolution.svg](architecture/evolution.svg). Every decision has a short record in [adr/](adr/), and the scaling explanations are in [system-design-details.md](system-design-details.md).
 
 | Version | The problem it fixed | Diagram | Details |
 |---|---|---|---|
