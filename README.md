@@ -1,74 +1,108 @@
 # AI Support Platform
 
-A support assistant that answers customer questions from your own help articles. It finds the passages that match the question's meaning, and a small local language model writes an answer only from those passages and shows its sources. If the articles don't contain the answer, it says "I could not find an answer" instead of making one up. It runs entirely on free, local models.
+A support assistant that answers customer questions from a company's own help articles. You upload the articles. When a customer asks something, the assistant finds the right passages, writes a short answer from them only, and shows where the answer came from. If the articles don't contain an answer, it says so instead of guessing.
 
-## System design
+It runs entirely on free, local AI models, with no paid AI service.
 
-![Platform system design](docs/architecture/v18.svg)
+| | |
+|---|---|
+| **For a support team** | Faster, consistent answers to repeated questions, always backed by a source |
+| **AI** | Search by meaning (MiniLM embeddings + pgvector) and answers from a small local language model (Qwen2.5-1.5B) |
+| **Engineering** | Separate services in Docker containers, run by Kubernetes, tested and published by CI |
+| **Status** | Finished and runs locally. 19 versions (v0-v18), each one fixing a measured problem |
 
-**Why this design:** each choice was measured in the [system design lab](system-design/README.md).
+---
 
-![Scaling results](system-design/architecture/step2-scaling.svg)
+## 1. How it works for a user
 
-Details: [docs/system-design-details.md](docs/system-design-details.md) · [ADR-040](docs/adr/ADR-040-scale-the-bottleneck.md)
+![How the system works for a user](docs/architecture/user-flow.svg)
 
-## The web app
-
-**1. Log in.** The line at the bottom shows that every part is running.
-
-![Log in](docs/images/1-login.png)
-
-**2. Upload a help article** (`.txt`, `.md` or `.pdf`). Its status changes from `queued` to `ready` in a few seconds.
-
-![Upload a document](docs/images/2-upload.png)
-
-**3. Ask a question.** The answer appears word by word, with the source it came from.
-
-![Ask a question](docs/images/3-answer.png)
-
-## What runs today
+## 2. Architecture
 
 ![System architecture](docs/architecture/system.svg)
 
-| Service | Job | Technology |
-|---|---|---|
-| Web app | the pages; the only part open to the internet | React, nginx |
-| API (×3) | login, documents, search, answers | FastAPI |
-| Worker | reads uploaded files in the background | Python |
-| Embedding service | turns text into numbers that describe its meaning | all-MiniLM-L6-v2 |
-| Model service | writes the answer | Qwen2.5-1.5B with llama.cpp (CPU) |
-| PostgreSQL | all data, plus vector search | PostgreSQL 17, pgvector |
-| Redis | rate limits shared by the API copies | Redis |
+## 3. How it scales, and why this design
 
-**On Kubernetes** (k3s, files in [k8s/](k8s/README.md)), each service is a Deployment with a fixed internal name (a Service). Only `web` is open, on NodePort 30080. When one of the 3 API pods was deleted, 40 of 40 requests still succeeded.
+![System design](docs/architecture/v18.svg)
+
+Every choice above was measured first, in a small [system design lab](system-design/README.md). In the lab each container gets 1 CPU, and every setup gets the same load test:
+
+![Scaling, measured](system-design/architecture/step2-scaling.svg)
+
+| Decision | Why |
+|---|---|
+| Copy the **slowest part** first (the answer model) | Adding gateways alone changed nothing (26 → 27 req/s). Copying the busy service doubled throughput (56 req/s) and cut the median wait from 5.6 s to 1.9 s. |
+| Keep the **API stateless**, as a pool behind one entry point | Any copy can serve any user, so copies can be added or lost without breaking anything. |
+| **One read replica**, on its own machine | A replica takes search reads off the main database and can take over if it fails. On one laptop it gave no gain, because it had no hardware of its own. |
+| **No sharding** yet | Writes were not the bottleneck: two shards gave 61 vs 58 req/s, but every query would then need a shard key. |
+| Say **"busy" early** | Once every model copy is working, an extra request gets a quick 503 instead of a minutes-long wait. |
+
+**When something fails:**
+- A crashed copy is restarted by Kubernetes. When one of the 3 API pods was deleted, 40 of 40 requests still succeeded.
+- An upload stays queued until the worker is back.
+- If the answer model is down, the API says so instead of hanging.
+
+## 4. Running on Kubernetes
 
 ![Kubernetes](docs/architecture/kubernetes.svg)
 
-The project grew one version at a time, and each version fixed one measured problem. All 19 versions (v0 to v18) are in **[docs/](docs/README.md)**.
+## 5. The web app
 
-## Run it (no code needed)
+<table>
+<tr>
+<td width="33%"><b>1. Log in</b><br><img src="docs/images/1-login.png" width="100%"></td>
+<td width="33%"><b>2. Upload a help article</b><br><img src="docs/images/2-upload.png" width="100%"></td>
+<td width="33%"><b>3. Ask a question</b><br><img src="docs/images/3-answer.png" width="100%"></td>
+</tr>
+</table>
 
-Every service is published on Docker Hub. You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/) and one file:
+## 6. Run it
+
+You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/). The images come from Docker Hub, so you don't need to clone the repository.
 
 ```bash
 curl -O https://raw.githubusercontent.com/ubaidur404786/ai-support-platform/main/docker-compose.hub.yml
 JWT_SECRET_KEY=$(openssl rand -hex 32) docker compose -f docker-compose.hub.yml up -d
 ```
 
-The first start downloads about 4.5 GB, because the two AI models are inside the images. Then open **http://localhost:8080**. To stop it, run `docker compose -f docker-compose.hub.yml down`.
+Open **http://localhost:8080**. The first start downloads about 4.5 GB, because the two models are inside the images. To stop it, run `docker compose -f docker-compose.hub.yml down`.
 
 On Kubernetes: `kubectl apply -k k8s`.
 
-## Next step: AWS (v19)
+## 7. Final remarks
 
-The same design, on separate machines:
-- an EC2 server with k3s
-- images pulled from Docker Hub
-- only the web port open
+- **Built by measuring, not guessing.** Every version started from a measured problem, for example "listing tickets took 2.2 s" or "the first search took 21 s", and ended with a number after the fix.
+- **Scale what is slow.** The lab showed that adding copies of the wrong part costs money and changes nothing.
+- **Honest limits:**
+  - On a laptop CPU, an answer takes about 7 s, and one model copy handles 5-10 answers a minute.
+  - Replicas and shards were tested only on one machine.
+  - Wrong answers are not yet detected while the system runs.
 
-The read replica will be measured again there, because on AWS it gets its own CPU and disk.
+## 8. What could come next
 
-## Develop and test
+![Next step: the same design on a cloud](docs/architecture/cloud-next.svg)
+
+With cloud credits or a budget for usage, the same design moves to **AWS, Azure or GCP**:
+- managed Kubernetes that adds copies automatically
+- GPU machines for the answer model
+- a managed PostgreSQL with a read replica
+- monitoring
+
+Other next steps:
+- a cache for repeated questions
+- checking answers for mistakes while the system runs
+- a monitoring dashboard
+- a safe way to roll out a new model and compare it with the old one
+
+## 9. The full story
+
+How the project started as one small file, what went wrong at each step, and every decision with its numbers:
+
+**[docs/ - the journey, version by version](docs/README.md)**
+
+---
+
+### Develop and test
 
 ```bash
 git clone https://github.com/ubaidur404786/ai-support-platform.git
@@ -78,16 +112,14 @@ docker compose up -d --build
 pip install -r requirements.txt && python ml/train.py && pytest
 ```
 
-GitHub Actions runs the tests on every push. On `main`, it also publishes the images to Docker Hub. The test files are numbered by the version that added them ([tests/README.md](tests/README.md)).
-
-## Project layout
+GitHub Actions runs the tests on every push. The tests are numbered by the version that added them ([tests/README.md](tests/README.md)).
 
 ```
-app/                  the backend (one folder per feature)
-frontend/             the React web app
-docker/               one Dockerfile per service
-k8s/                  Kubernetes files
-system-design/        the lab: nginx, gateways, replicas, shards, load tests, charts
-tests/                tests, numbered by version
-docs/                 version history, diagrams, decisions
+app/             backend, one folder per feature (auth, documents, answers, model_service, embedding_service)
+frontend/        React web app
+docker/          one Dockerfile per service
+k8s/             Kubernetes files
+system-design/   the scaling lab: nginx, gateways, replicas, shards, load tests, charts
+tests/           tests, numbered by version
+docs/            the journey: versions, diagrams, decisions
 ```
