@@ -13,40 +13,73 @@ It runs entirely on free, local AI models, with no paid AI service.
 
 ---
 
-## 1. How it works for a user
+## 1. What happens when more people use it?
 
-![How the system works for a user](docs/architecture/user-flow.svg)
+The question every system faces: **more users arrive, so what slows down, and what should we add?** These answers come from a [load-testing lab](system-design/README.md). Every container gets 1 CPU, and every setup gets the same test.
 
-## 2. Architecture
+**One server: more users just wait longer.** Throughput stays around 25 requests/s however many users arrive, so each new user only joins the queue. At 100 users the median wait is 5.6 s.
 
-![System architecture](docs/architecture/system.svg)
+<table>
+<tr>
+<td width="50%"><img src="system-design/architecture/chart-tickets-throughput.svg" width="100%"></td>
+<td width="50%"><img src="system-design/architecture/chart-tickets-latency.svg" width="100%"></td>
+</tr>
+</table>
 
-## 3. How it scales, and why this design
-
-![System design](docs/architecture/v18.svg)
-
-Every choice above was measured first, in a small [system design lab](system-design/README.md). In the lab each container gets 1 CPU, and every setup gets the same load test:
+**Why: only copying the busy part helps.**
+- 3 gateways (orange line, lying on top of the blue 1-gateway line): no change, because the gateway was never the slow part.
+- 3 cells, where each gateway gets its own copy of the busy service (green line): **2.2× the throughput**, and the median wait falls **from 5.6 s to 1.9 s**.
 
 ![Scaling, measured](system-design/architecture/step2-scaling.svg)
 
-| Decision | Why |
+**But the busy part depends on the request.** This endpoint does almost no work in the service, so the gateway is the slow part, and adding gateways gave about **3× the throughput**.
+
+<table>
+<tr>
+<td width="50%"><img src="system-design/architecture/chart-users-throughput.svg" width="100%"></td>
+<td width="50%"><img src="system-design/architecture/chart-users-latency.svg" width="100%"></td>
+</tr>
+</table>
+
+**And the database?** Replicas and shards on one laptop gave **no gain**, because the copies shared the same CPU and disk. Shards helped only the whole-table read, because each shard scans half the rows. Copies help only when they get hardware of their own.
+
+<table>
+<tr>
+<td width="50%"><img src="system-design/architecture/chart-database.svg" width="100%"></td>
+<td width="50%"><img src="system-design/architecture/step3-replication.svg" width="100%"></td>
+</tr>
+</table>
+
+## 2. The design these results led to
+
+![System design](docs/architecture/v18.svg)
+
+| Decision | Because of |
 |---|---|
-| Copy the **slowest part** first (the answer model) | Adding gateways alone changed nothing (26 → 27 req/s). Copying the busy service doubled throughput (56 req/s) and cut the median wait from 5.6 s to 1.9 s. |
-| Keep the **API stateless**, as a pool behind one entry point | Any copy can serve any user, so copies can be added or lost without breaking anything. |
-| **One read replica**, on its own machine | A replica takes search reads off the main database and can take over if it fails. On one laptop it gave no gain, because it had no hardware of its own. |
-| **No sharding** yet | Writes were not the bottleneck: two shards gave 61 vs 58 req/s, but every query would then need a shard key. |
-| Say **"busy" early** | Once every model copy is working, an extra request gets a quick 503 instead of a minutes-long wait. |
+| Copy the **slowest part** first (the answer model) | The tickets charts: copying the busy service doubled throughput |
+| Keep the **API stateless**, in one pool | Copies only help if any copy can serve any user |
+| **One read replica**, on its own machine | The database chart: copies on shared hardware gave nothing |
+| **No sharding** yet | Writes were not the bottleneck (61 vs 58 req/s) |
+| Say **"busy" early** | Above capacity, users only wait longer (the latency chart) |
 
 **When something fails:**
-- A crashed copy is restarted by Kubernetes. When one of the 3 API pods was deleted, 40 of 40 requests still succeeded.
-- An upload stays queued until the worker is back.
+- Kubernetes restarts a crashed copy. With one of the 3 API pods deleted, 40 of 40 requests still succeeded.
+- An upload waits in the queue until the worker is back.
 - If the answer model is down, the API says so instead of hanging.
 
-## 4. Running on Kubernetes
+## 3. How it works for a user
+
+![How the system works for a user](docs/architecture/user-flow.svg)
+
+## 4. Architecture
+
+![System architecture](docs/architecture/system.svg)
+
+## 5. Running on Kubernetes
 
 ![Kubernetes](docs/architecture/kubernetes.svg)
 
-## 5. The web app
+## 6. The web app
 
 <table>
 <tr>
@@ -56,7 +89,7 @@ Every choice above was measured first, in a small [system design lab](system-des
 </tr>
 </table>
 
-## 6. Run it
+## 7. Run it
 
 You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/). The images come from Docker Hub, so you don't need to clone the repository.
 
@@ -69,7 +102,7 @@ Open **http://localhost:8080**. The first start downloads about 4.5 GB, because 
 
 On Kubernetes: `kubectl apply -k k8s`.
 
-## 7. Final remarks
+## 8. Final remarks
 
 - **Built by measuring, not guessing.** Every version started from a measured problem, for example "listing tickets took 2.2 s" or "the first search took 21 s", and ended with a number after the fix.
 - **Scale what is slow.** The lab showed that adding copies of the wrong part costs money and changes nothing.
@@ -78,7 +111,7 @@ On Kubernetes: `kubectl apply -k k8s`.
   - Replicas and shards were tested only on one machine.
   - Wrong answers are not yet detected while the system runs.
 
-## 8. What could come next
+## 9. What could come next
 
 ![Next step: the same design on a cloud](docs/architecture/cloud-next.svg)
 
@@ -94,7 +127,7 @@ Other next steps:
 - a monitoring dashboard
 - a safe way to roll out a new model and compare it with the old one
 
-## 9. The full story
+## 10. The full story
 
 How the project started as one small file, what went wrong at each step, and every decision with its numbers:
 

@@ -49,6 +49,15 @@ def line_chart(file, title, subtitle, series, key, unit):
         parts.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2"/>')
         for i, r in enumerate(rows):
             parts.append(f'<circle cx="{x(i):.1f}" cy="{y(r[key]):.1f}" r="4" fill="{color}" stroke="#fcfcfb" stroke-width="2"/>')
+
+    # Legend on the right, top to bottom. Lines can lie on top of each other,
+    # so the legend (not the line end) is what names each setup.
+    for k, (name, rows) in enumerate(series.items()):
+        ly = top + 10 + k * 22
+        lx = w - right + 14
+        parts.append(f'<line x1="{lx}" x2="{lx + 18}" y1="{ly}" y2="{ly}" stroke="{COLORS[name]}" stroke-width="3"/>')
+        parts.append(f'<text x="{lx + 24}" y="{ly + 4}" fill="{INK}">{name}: {rows[-1][key]:,.0f}</text>')
+    parts.append(f'<text x="{w - right + 14}" y="{top + 10 + len(series) * 22}" fill="{MUTED}">at {users[-1]} users</text>')
     parts.append("</svg>")
     (OUT / file).write_text("\n".join(parts), encoding="utf-8")
 

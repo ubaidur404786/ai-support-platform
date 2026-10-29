@@ -37,4 +37,11 @@
 <circle cx="320.0" cy="328.9" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="445.0" cy="330.5" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="570.0" cy="257.4" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<line x1="584" x2="602" y1="80" y2="80" stroke="#2a78d6" stroke-width="3"/>
+<text x="608" y="84" fill="#0b0b0b">1 gateway: 2,445</text>
+<line x1="584" x2="602" y1="102" y2="102" stroke="#eb6834" stroke-width="3"/>
+<text x="608" y="106" fill="#0b0b0b">3 gateways: 907</text>
+<line x1="584" x2="602" y1="124" y2="124" stroke="#1baf7a" stroke-width="3"/>
+<text x="608" y="128" fill="#0b0b0b">3 cells: 890</text>
+<text x="584" y="146" fill="#898781">at 200 users</text>
 </svg>
