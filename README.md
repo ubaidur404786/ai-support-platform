@@ -4,7 +4,7 @@ A support assistant that answers customer questions from a company's own help ar
 
 It runs entirely on free, local AI models, with no paid AI service.
 
-| | |
+| Area | In short |
 |---|---|
 | **For a support team** | Faster, consistent answers to repeated questions, always backed by a source |
 | **AI** | Search by meaning (MiniLM embeddings + pgvector) and answers from a small local language model (Qwen2.5-1.5B) |
